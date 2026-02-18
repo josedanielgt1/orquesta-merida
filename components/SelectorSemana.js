@@ -79,9 +79,9 @@ export default function SelectorSemana({ semanaActual, onCambiarSemana }) {
   const semanasDelMes = obtenerSemanasDelMes(mesVista);
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 mb-8">
+    <div className="bg-white rounded-lg shadow p-6 mb-8 text-gray-900">
       {/* Header con navegación rápida */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 text-gray-900">
         <h2 className="text-2xl font-bold text-gray-900">Seleccionar Semana</h2>
         <div className="flex gap-2">
           <button
@@ -106,7 +106,7 @@ export default function SelectorSemana({ semanaActual, onCambiarSemana }) {
       </div>
 
       {/* Semana actual seleccionada */}
-      <div className="bg-blue-50 rounded-lg p-4 mb-6 text-center">
+      <div className="bg-blue-50 rounded-lg p-4 mb-6 text-center text-gray-900">
         <p className="text-sm text-gray-600 mb-1">Semana seleccionada:</p>
         <p className="text-2xl font-bold text-blue-900">
           {formatearSemana(semanaActual)}
