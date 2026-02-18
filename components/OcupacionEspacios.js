@@ -8,7 +8,17 @@ export default function OcupacionEspacios({ solicitudes, espacios }) {
   const espaciosPorPagina = 12;
   
   const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const horas = Array.from({ length: 11 }, (_, i) => `${8 + i}:00`);
+  const generarHorarios = () => {
+    const horarios = [];
+    for (let h = 8; h <= 19; h++) {
+      for (let m of [0, 15, 30, 45]){
+        if (h=== 19 && m >0) break; // terminar en 19:00
+        horarios.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+      }
+    }
+    return horarios;
+  };
+  const horas = generarHorarios  ();
 
   // Paginación
   const totalPaginas = Math.ceil(espacios.length / espaciosPorPagina);
@@ -23,11 +33,14 @@ export default function OcupacionEspacios({ solicitudes, espacios }) {
       if (s.espacioAsignado !== espacio) return false;
       if (s.dia !== dia) return false;
       
-      const horaNum = parseInt(hora.split(':')[0]);
-      const inicioNum = parseInt(s.horaInicio.split(':')[0]);
-      const finNum = parseInt(s.horaFin.split(':')[0]);
+      const [horaNum, minNum] = hora.split(':').map(Number);
+     const [inicioHora, inicioMin] = s.horaInicio.split(':').map(Number);
+      const [finHora, finMin] = s.horaFin.split(':').map(Number);
       
-      return horaNum >= inicioNum && horaNum < finNum;
+      const horaActualMinutos = horaNum * 60 + minNum;
+      const inicioMinutos = inicioHora * 60 + inicioMin;
+      const finMinutos = finHora * 60 + finMin;
+      return horaActualMinutos >= inicioMinutos && horaActualMinutos < finMinutos;
     });
   };
 

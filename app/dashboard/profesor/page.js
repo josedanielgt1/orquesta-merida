@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/app/firebase';
-import { obtenerInicioSemana, formatearSemana } from '@/utils/fechas';
+import { obtenerInicioSemana, formatearSemana, obtenerNumeroSemana } from '@/utils/fechas';
 import { generarPDFPorProfesor } from '@/utils/pdfGenerator';
 import Button from '@/components/ui/Button';
 import Loading from '@/components/ui/Loading';
+import Modal from '@/components/ui/Modal';
 import SolicitudForm from '@/components/SolicitudForm';
 import CalendarioSemanal from '@/components/CalendarioSemanal';
 
@@ -18,6 +19,15 @@ export default function ProfesorDashboard() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [vistaActiva, setVistaActiva] = useState('solicitudes');
+  const [semanaActual, setSemanaActual] = useState(obtenerInicioSemana(new Date()));
+  const [modal, setModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+    showCancel: false,
+    onConfirm: null
+  });
   const router = useRouter();
 
   useEffect(() => {
@@ -68,6 +78,40 @@ export default function ProfesorDashboard() {
       user.name,
       formatearSemana(obtenerInicioSemana(new Date()))
     );
+  };
+
+  const cancelarSolicitud = async (solicitudId, solicitudInfo) => {
+    setModal({
+      isOpen: true,
+      title: '⚠️ ¿Cancelar solicitud?',
+      message: `¿Estás seguro de cancelar la solicitud de:\n\n${solicitudInfo.dia} · ${solicitudInfo.horaInicio} - ${solicitudInfo.horaFin}\n\nEsta acción no se puede deshacer.`,
+      type: 'warning',
+      showCancel: true,
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'requests', solicitudId));
+          
+          setModal({
+            isOpen: true,
+            title: '✅ Solicitud cancelada',
+            message: 'La solicitud ha sido eliminada correctamente.',
+            type: 'success',
+            showCancel: false,
+            onConfirm: null
+          });
+        } catch (err) {
+          console.error('Error:', err);
+          setModal({
+            isOpen: true,
+            title: 'Error',
+            message: 'No se pudo cancelar la solicitud. Intenta de nuevo.',
+            type: 'error',
+            showCancel: false,
+            onConfirm: null
+          });
+        }
+      }
+    });
   };
 
   if (!user) return <Loading message="Cargando panel..." />;
@@ -255,6 +299,7 @@ export default function ProfesorDashboard() {
               <div className="space-y-6">
                 {solicitudesAgrupadas.map((item, idx) => {
                   if (item.esGrupo) {
+                    // ── SOLICITUD POR RANGO ──
                     const total = item.solicitudes.length;
                     const aprobadas = item.solicitudes.filter(s => s.estado === 'aprobada').length;
                     const pendientes = item.solicitudes.filter(s => s.estado === 'pendiente').length;
@@ -333,7 +378,7 @@ export default function ProfesorDashboard() {
                                     : 'bg-white border-gray-200'
                                 }`}
                               >
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3 flex-1">
                                   <span className="text-lg">
                                     {sol.estado === 'aprobada' ? '✅' :
                                      sol.estado === 'rechazada' ? '❌' : '⏳'}
@@ -355,16 +400,29 @@ export default function ProfesorDashboard() {
                                   </div>
                                 </div>
 
-                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                                  sol.estado === 'aprobada'
-                                    ? 'bg-green-100 text-green-700'
-                                    : sol.estado === 'rechazada'
-                                    ? 'bg-red-100 text-red-700'
-                                    : 'bg-yellow-100 text-yellow-700'
-                                }`}>
-                                  {sol.estado === 'aprobada' ? 'Aprobada' :
-                                   sol.estado === 'rechazada' ? 'Rechazada' : 'Pendiente'}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                    sol.estado === 'aprobada'
+                                      ? 'bg-green-100 text-green-700'
+                                      : sol.estado === 'rechazada'
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {sol.estado === 'aprobada' ? 'Aprobada' :
+                                     sol.estado === 'rechazada' ? 'Rechazada' : 'Pendiente'}
+                                  </span>
+
+                                  {/* Botón cancelar */}
+                                  {sol.estado === 'pendiente' && (
+                                    <button
+                                      onClick={() => cancelarSolicitud(sol.id, sol)}
+                                      className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                                      title="Cancelar esta solicitud"
+                                    >
+                                      🗑️
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
@@ -372,6 +430,7 @@ export default function ProfesorDashboard() {
                       </div>
                     );
                   } else {
+                    // ── SOLICITUD INDIVIDUAL ──
                     const sol = item.solicitudes[0];
                     let semanaTexto = '';
                     if (sol.semanaInicio) {
@@ -396,28 +455,43 @@ export default function ProfesorDashboard() {
                             : 'border-red-500 bg-red-50'
                         }`}
                       >
-                        {semanaTexto && (
-                          <p className="text-xs text-gray-500 mb-1">
-                            📅 Semana del {semanaTexto}
-                          </p>
-                        )}
-                        <p className="font-bold text-lg text-gray-900">
-                          {sol.dia} · {sol.horaInicio} - {sol.horaFin}
-                        </p>
-                        <p className="text-sm text-gray-600 capitalize">
-                          Clase {sol.tipoClase}
-                        </p>
-                        {sol.observaciones && (
-                          <p className="text-sm text-gray-500 mt-1">📝 {sol.observaciones}</p>
-                        )}
-                        <p className={`text-sm font-bold mt-2 ${
-                          sol.estado === 'pendiente' ? 'text-yellow-600' :
-                          sol.estado === 'aprobada' ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {sol.estado === 'pendiente' && '⏳ Pendiente de aprobación'}
-                          {sol.estado === 'aprobada' && `✓ Aprobada - Espacio ${sol.espacioAsignado}`}
-                          {sol.estado === 'rechazada' && `✗ Rechazada${sol.notasAdmin ? ` - ${sol.notasAdmin}` : ''}`}
-                        </p>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            {semanaTexto && (
+                              <p className="text-xs text-gray-500 mb-1">
+                                📅 Semana del {semanaTexto}
+                              </p>
+                            )}
+                            <p className="font-bold text-lg text-gray-900">
+                              {sol.dia} · {sol.horaInicio} - {sol.horaFin}
+                            </p>
+                            <p className="text-sm text-gray-600 capitalize">
+                              Clase {sol.tipoClase}
+                            </p>
+                            {sol.observaciones && (
+                              <p className="text-sm text-gray-500 mt-1">📝 {sol.observaciones}</p>
+                            )}
+                            <p className={`text-sm font-bold mt-2 ${
+                              sol.estado === 'pendiente' ? 'text-yellow-600' :
+                              sol.estado === 'aprobada' ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {sol.estado === 'pendiente' && '⏳ Pendiente de aprobación'}
+                              {sol.estado === 'aprobada' && `✓ Aprobada - Espacio ${sol.espacioAsignado}`}
+                              {sol.estado === 'rechazada' && `✗ Rechazada${sol.notasAdmin ? ` - ${sol.notasAdmin}` : ''}`}
+                            </p>
+                          </div>
+
+                          {/* Botón cancelar */}
+                          {sol.estado === 'pendiente' && (
+                            <button
+                              onClick={() => cancelarSolicitud(sol.id, sol)}
+                              className="ml-4 p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                              title="Cancelar solicitud"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   }
@@ -429,13 +503,68 @@ export default function ProfesorDashboard() {
 
         {/* VISTA: CALENDARIO */}
         {vistaActiva === 'calendario' && (
-          <CalendarioSemanal
-            solicitudes={solicitudes}
-            profesorView={true}
-          />
+          <div>
+            {/* Navegación de semana */}
+            <div className="bg-white rounded-lg shadow p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    const nueva = new Date(semanaActual);
+                    nueva.setDate(nueva.getDate() - 7);
+                    setSemanaActual(nueva);
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300"
+                >
+                  ← Anterior
+                </button>
+
+                <div className="text-center">
+                  <p className="text-xl font-bold text-gray-900">
+                    {formatearSemana(semanaActual)}
+                  </p>
+                  <button
+                    onClick={() => setSemanaActual(obtenerInicioSemana(new Date()))}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    Ir a esta semana
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const nueva = new Date(semanaActual);
+                    nueva.setDate(nueva.getDate() + 7);
+                    setSemanaActual(nueva);
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300"
+                >
+                  Siguiente →
+                </button>
+              </div>
+            </div>
+
+            <CalendarioSemanal
+              solicitudes={solicitudes.filter(s =>
+                s.semanaId === obtenerNumeroSemana(semanaActual)
+              )}
+              profesorView={true}
+            />
+          </div>
         )}
 
       </main>
+
+      {/* Modal */}
+      <Modal
+        isOpen={modal.isOpen}
+        onClose={() => setModal({...modal, isOpen: false})}
+        title={modal.title}
+        type={modal.type}
+        showCancel={modal.showCancel}
+        onConfirm={modal.onConfirm}
+      >
+        <p className="whitespace-pre-line">{modal.message}</p>
+      </Modal>
     </div>
   );
 }

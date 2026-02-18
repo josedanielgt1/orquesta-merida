@@ -1,328 +1,325 @@
 "use client"
 
-import { useState } from 'react';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/app/firebase';
-import { obtenerNumeroSemana, formatearSemana, obtenerInicioSemana } from '@/utils/fechas';
+import { obtenerInicioSemana, obtenerNumeroSemana, formatearSemana } from '@/utils/fechas';
 import Button from './ui/Button';
+import Card from './ui/Card';
+import Modal from './ui/Modal';
 
 export default function GestionSemanas({ semanaActual, onActualizar }) {
   const [loading, setLoading] = useState(false);
+  const [comparacion, setComparacion] = useState(null);
+  const [showComparacion, setShowComparacion] = useState(false);
+  const [modal, setModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+    showCancel: false,
+    onConfirm: null
+  });
+
+  const semanaAnterior = new Date(semanaActual);
+  semanaAnterior.setDate(semanaAnterior.getDate() - 7);
+  const semanaAnteriorId = obtenerNumeroSemana(semanaAnterior);
+  const semanaActualId = obtenerNumeroSemana(semanaActual);
 
   const compararSemanas = async () => {
     setLoading(true);
-
     try {
-      // Obtener semana anterior
-      const semanaAnterior = new Date(semanaActual);
-      semanaAnterior.setDate(semanaAnterior.getDate() - 7);
-      const semanaAnteriorId = obtenerNumeroSemana(semanaAnterior);
-      const semanaActualId = obtenerNumeroSemana(semanaActual);
-
-      // Solicitudes semana anterior (aprobadas)
-      const qAnterior = query(
-        collection(db, 'requests'),
-        where('semanaId', '==', semanaAnteriorId),
-        where('estado', '==', 'aprobada')
-      );
-      const snapshotAnterior = await getDocs(qAnterior);
-
-      // Solicitudes semana actual (aprobadas)
-      const qActual = query(
-        collection(db, 'requests'),
-        where('semanaId', '==', semanaActualId),
-        where('estado', '==', 'aprobada')
-      );
-      const snapshotActual = await getDocs(qActual);
-
-      const totalAnterior = snapshotAnterior.size;
-      const totalActual = snapshotActual.size;
-
-      // Analizar qué espacios/horarios están disponibles para copiar
-      let disponiblesCopiar = 0;
-      const solicitudesActuales = [];
-      snapshotActual.forEach(doc => solicitudesActuales.push(doc.data()));
-
-      snapshotAnterior.forEach(doc => {
-        const solicitud = doc.data();
-        
-        // Verificar si tiene conflicto
-        const conflicto = solicitudesActuales.some(existente => {
-          if (existente.espacioAsignado !== solicitud.espacioAsignado) return false;
-          if (existente.dia !== solicitud.dia) return false;
-          
-          return (
-            (solicitud.horaInicio >= existente.horaInicio && solicitud.horaInicio < existente.horaFin) ||
-            (solicitud.horaFin > existente.horaInicio && solicitud.horaFin <= existente.horaFin) ||
-            (solicitud.horaInicio <= existente.horaInicio && solicitud.horaFin >= existente.horaFin)
-          );
-        });
-
-        if (!conflicto) disponiblesCopiar++;
-      });
-
-      const bloqueadas = totalAnterior - disponiblesCopiar;
-
-      let mensaje = `📊 COMPARACIÓN DE SEMANAS\n\n`;
-      mensaje += `Semana anterior: ${totalAnterior} solicitudes aprobadas\n`;
-      mensaje += `Semana actual: ${totalActual} solicitudes aprobadas\n\n`;
-      mensaje += `Si copiaras la semana anterior ahora:\n`;
-      mensaje += `✓ Se copiarían: ${disponiblesCopiar} solicitudes\n`;
-      mensaje += `⚠️ Se omitirían: ${bloqueadas} (por conflictos)\n\n`;
-      
-      if (bloqueadas === 0) {
-        mensaje += `✅ No hay conflictos. Puedes copiar toda la semana anterior.`;
-      } else {
-        mensaje += `⚠️ Hay ${bloqueadas} espacios/horarios que ya están ocupados en la semana actual.`;
-      }
-
-      alert(mensaje);
-
-    } catch (err) {
-      console.error('Error:', err);
-      alert('Error al comparar semanas: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const copiarSemanaAnterior = async () => {
-    const confirmar = window.confirm(
-      `¿Deseas copiar las solicitudes aprobadas de la semana anterior?\n\n` +
-      `El sistema verificará conflictos y solo copiará lo que esté disponible.`
-    );
-
-    if (!confirmar) return;
-
-    setLoading(true);
-
-    try {
-      // Obtener semana anterior
-      const semanaAnterior = new Date(semanaActual);
-      semanaAnterior.setDate(semanaAnterior.getDate() - 7);
-      const semanaAnteriorId = obtenerNumeroSemana(semanaAnterior);
-      const semanaActualId = obtenerNumeroSemana(semanaActual);
-
-      // Buscar solicitudes aprobadas de semana anterior
       const qAnterior = query(
         collection(db, 'requests'),
         where('semanaId', '==', semanaAnteriorId),
         where('estado', '==', 'aprobada')
       );
 
-      const snapshotAnterior = await getDocs(qAnterior);
-      
-      if (snapshotAnterior.empty) {
-        alert('No hay solicitudes aprobadas en la semana anterior para copiar');
-        setLoading(false);
-        return;
-      }
-
-      // Buscar solicitudes YA existentes en semana actual
       const qActual = query(
         collection(db, 'requests'),
         where('semanaId', '==', semanaActualId)
       );
 
-      const snapshotActual = await getDocs(qActual);
-      const solicitudesExistentes = [];
-      snapshotActual.forEach(doc => {
-        const data = doc.data();
-        if (data.estado === 'aprobada') {
-          solicitudesExistentes.push(data);
-        }
+      const [snapshotAnterior, snapshotActual] = await Promise.all([
+        getDocs(qAnterior),
+        getDocs(qActual)
+      ]);
+
+      const solicitudesAnterior = [];
+      snapshotAnterior.forEach(doc => {
+        solicitudesAnterior.push({ id: doc.id, ...doc.data() });
       });
 
-      // Función para verificar conflicto
-      const tieneConflicto = (solicitud) => {
-        return solicitudesExistentes.some(existente => {
-          // Mismo espacio y día
-          if (existente.espacioAsignado !== solicitud.espacioAsignado) return false;
-          if (existente.dia !== solicitud.dia) return false;
-          
-          // Verificar solapamiento de horarios
+      const solicitudesActual = [];
+      snapshotActual.forEach(doc => {
+        solicitudesActual.push({ id: doc.id, ...doc.data() });
+      });
+
+      const conflictos = [];
+      const copiables = solicitudesAnterior.filter(anterior => {
+        const tieneConflicto = solicitudesActual.some(actual => {
+          if (actual.dia !== anterior.dia) return false;
+          if (actual.espacioAsignado !== anterior.espacioAsignado) return false;
+
           return (
-            (solicitud.horaInicio >= existente.horaInicio && solicitud.horaInicio < existente.horaFin) ||
-            (solicitud.horaFin > existente.horaInicio && solicitud.horaFin <= existente.horaFin) ||
-            (solicitud.horaInicio <= existente.horaInicio && solicitud.horaFin >= existente.horaFin)
+            (anterior.horaInicio >= actual.horaInicio && anterior.horaInicio < actual.horaFin) ||
+            (anterior.horaFin > actual.horaInicio && anterior.horaFin <= actual.horaFin) ||
+            (anterior.horaInicio <= actual.horaInicio && anterior.horaFin >= actual.horaFin)
           );
         });
-      };
 
-      let copiadas = 0;
-      let omitidas = 0;
-      const conflictos = [];
-
-      // Procesar cada solicitud
-      for (const docSnap of snapshotAnterior.docs) {
-        const solicitud = docSnap.data();
-        
-        // Verificar conflicto
-        if (tieneConflicto(solicitud)) {
-          omitidas++;
-          conflictos.push({
-            profesor: solicitud.profesorName,
-            dia: solicitud.dia,
-            horario: `${solicitud.horaInicio}-${solicitud.horaFin}`,
-            espacio: solicitud.espacioAsignado
-          });
-          continue; // Saltar esta solicitud
+        if (tieneConflicto) {
+          conflictos.push(anterior);
         }
 
-        // Si no hay conflicto, copiar
-        await addDoc(collection(db, 'requests'), {
-          profesorId: solicitud.profesorId,
-          profesorName: solicitud.profesorName,
-          dia: solicitud.dia,
-          horaInicio: solicitud.horaInicio,
-          horaFin: solicitud.horaFin,
-          tipoClase: solicitud.tipoClase,
-          observaciones: `Copiado de semana anterior${solicitud.observaciones ? ' - ' + solicitud.observaciones : ''}`,
-          estado: 'aprobada',
-          espacioAsignado: solicitud.espacioAsignado,
-          fechaSolicitud: serverTimestamp(),
-          fechaAprobacion: serverTimestamp(),
-          notasAdmin: 'Copiado automáticamente de semana anterior',
-          semanaInicio: semanaActual,
-          semanaId: semanaActualId
-        });
+        return !tieneConflicto;
+      });
 
-        copiadas++;
-      }
+      setComparacion({
+        anterior: solicitudesAnterior.length,
+        actual: solicitudesActual.length,
+        copiables: copiables.length,
+        conflictos: conflictos.length,
+        detalleCopiables: copiables,
+        detalleConflictos: conflictos
+      });
 
-      // Mostrar resultado detallado
-      let mensaje = `✅ PROCESO COMPLETADO\n\n`;
-      mensaje += `✓ Copiadas: ${copiadas} solicitudes\n`;
-      
-      if (omitidas > 0) {
-        mensaje += `⚠️ Omitidas: ${omitidas} (tenían conflictos)\n\n`;
-        mensaje += `CONFLICTOS DETECTADOS:\n`;
-        mensaje += `(Estas solicitudes NO se copiaron porque el espacio ya está ocupado)\n\n`;
-        
-        conflictos.forEach((c, idx) => {
-          mensaje += `${idx + 1}. ${c.profesor}\n`;
-          mensaje += `   ${c.dia} ${c.horario} - ${c.espacio}\n\n`;
-        });
-      }
-
-      alert(mensaje);
-      
-      if (onActualizar) onActualizar();
+      setShowComparacion(true);
 
     } catch (err) {
       console.error('Error:', err);
-      alert('Error al copiar semana: ' + err.message);
+      setModal({
+        isOpen: true,
+        title: 'Error',
+        message: 'Error al comparar semanas. Por favor intenta de nuevo.',
+        type: 'error',
+        showCancel: false,
+        onConfirm: null
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  const copiarSemana = async () => {
+    if (!comparacion || comparacion.copiables === 0) {
+      setModal({
+        isOpen: true,
+        title: 'No hay solicitudes para copiar',
+        message: 'No hay solicitudes sin conflictos que se puedan copiar a esta semana.',
+        type: 'warning',
+        showCancel: false,
+        onConfirm: null
+      });
+      return;
+    }
+
+    setModal({
+      isOpen: true,
+      title: '¿Confirmar copia de semana?',
+      message: `Se copiarán ${comparacion.copiables} solicitudes de la semana anterior a esta semana.\n\n${comparacion.conflictos > 0 ? `⚠️ ${comparacion.conflictos} solicitudes se omitirán por conflictos.` : ''}`,
+      type: 'confirm',
+      showCancel: true,
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          const promesas = comparacion.detalleCopiables.map(solicitud =>
+            addDoc(collection(db, 'requests'), {
+              profesorId: solicitud.profesorId,
+              profesorName: solicitud.profesorName,
+              dia: solicitud.dia,
+              horaInicio: solicitud.horaInicio,
+              horaFin: solicitud.horaFin,
+              tipoClase: solicitud.tipoClase,
+              observaciones: solicitud.observaciones || '',
+              estado: 'aprobada',
+              espacioAsignado: solicitud.espacioAsignado,
+              fechaSolicitud: serverTimestamp(),
+              fechaAprobacion: serverTimestamp(),
+              semanaId: semanaActualId,
+              semanaInicio: semanaActual,
+              copiadaDeSemana: semanaAnteriorId
+            })
+          );
+
+          await Promise.all(promesas);
+
+          setModal({
+            isOpen: true,
+            title: '✅ Semana copiada exitosamente',
+            message: `Se copiaron ${comparacion.copiables} solicitudes.\n${comparacion.conflictos > 0 ? `\n${comparacion.conflictos} solicitudes se omitieron por conflictos.` : ''}`,
+            type: 'success',
+            showCancel: false,
+            onConfirm: () => {
+              setShowComparacion(false);
+              setComparacion(null);
+              if (onActualizar) onActualizar();
+            }
+          });
+
+        } catch (err) {
+          console.error('Error:', err);
+          setModal({
+            isOpen: true,
+            title: 'Error al copiar',
+            message: 'Ocurrió un error al copiar la semana. Por favor intenta de nuevo.',
+            type: 'error',
+            showCancel: false,
+            onConfirm: null
+          });
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
   };
 
   const limpiarSemana = async () => {
-    const confirmar = window.confirm(
-      `⚠️ ¿ESTÁS SEGURO?\n\n` +
-      `Esto ELIMINARÁ todas las solicitudes de la semana:\n` +
-      `${formatearSemana(semanaActual)}\n\n` +
-      `Esta acción NO se puede deshacer.`
-    );
+    setModal({
+      isOpen: true,
+      title: '⚠️ ¿Limpiar toda la semana?',
+      message: 'Esta acción eliminará TODAS las solicitudes aprobadas de esta semana. Esta acción no se puede deshacer.',
+      type: 'warning',
+      showCancel: true,
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          const q = query(
+            collection(db, 'requests'),
+            where('semanaId', '==', semanaActualId)
+          );
 
-    if (!confirmar) return;
+          const snapshot = await getDocs(q);
+          const promesas = [];
+          
+          snapshot.forEach(doc => {
+            promesas.push(doc.ref.delete());
+          });
 
-    const segundaConfirmacion = window.confirm(
-      `Segunda confirmación: ¿Realmente deseas eliminar TODAS las solicitudes de esta semana?`
-    );
+          await Promise.all(promesas);
 
-    if (!segundaConfirmacion) return;
+          setModal({
+            isOpen: true,
+            title: '✅ Semana limpiada',
+            message: 'Se eliminaron todas las solicitudes de esta semana.',
+            type: 'success',
+            showCancel: false,
+            onConfirm: () => {
+              if (onActualizar) onActualizar();
+            }
+          });
 
-    setLoading(true);
-
-    try {
-      const q = query(
-        collection(db, 'requests'),
-        where('semanaId', '==', obtenerNumeroSemana(semanaActual))
-      );
-
-      const snapshot = await getDocs(q);
-      
-      let eliminadas = 0;
-
-      for (const docSnap of snapshot.docs) {
-        await deleteDoc(docSnap.ref);
-        eliminadas++;
+        } catch (err) {
+          console.error('Error:', err);
+          setModal({
+            isOpen: true,
+            title: 'Error',
+            message: 'Error al limpiar la semana. Por favor intenta de nuevo.',
+            type: 'error',
+            showCancel: false,
+            onConfirm: null
+          });
+        } finally {
+          setLoading(false);
+        }
       }
-
-      alert(`✅ Se eliminaron ${eliminadas} solicitudes`);
-      
-      if (onActualizar) onActualizar();
-
-    } catch (err) {
-      console.error('Error:', err);
-      alert('Error al limpiar semana: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   return (
-    <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg shadow p-6 mb-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">
-        🔄 Gestión de Semanas
-      </h2>
+    <>
+      <Card title="Gestión de Semanas">
+        <div className="space-y-4">
+          
+          {/* Comparar semanas */}
+          <div>
+            <Button
+              variant="secondary"
+              onClick={compararSemanas}
+              disabled={loading}
+            >
+              {loading ? 'Cargando...' : '📊 Comparar Semanas'}
+            </Button>
+            <p className="text-sm text-gray-600 mt-2">
+              Compara la semana anterior con la actual para ver qué se puede copiar
+            </p>
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Comparar Semanas */}
-        <div className="bg-white rounded p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">
-            Comparar Semanas
-          </h3>
-          <p className="text-sm text-gray-600 mb-4">
-            Analiza cuántas solicitudes se pueden copiar sin conflictos.
-            No modifica nada, solo muestra información.
-          </p>
-          <Button 
-            variant="secondary" 
-            onClick={compararSemanas}
-            disabled={loading}
-          >
-            {loading ? 'Analizando...' : '📊 Comparar'}
-          </Button>
-        </div>
+          {/* Resultados de comparación */}
+          {showComparacion && comparacion && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+              <h3 className="font-bold text-blue-900 mb-3">📋 COMPARACIÓN DE SEMANAS</h3>
+              
+              <div className="space-y-2 text-sm">
+                <p className="text-gray-700">
+                  <strong>Semana anterior:</strong> {comparacion.anterior} solicitudes aprobadas
+                </p>
+                <p className="text-gray-700">
+                  <strong>Semana actual:</strong> {comparacion.actual} solicitudes aprobadas
+                </p>
+                <hr className="my-3 border-blue-200" />
+                <p className="text-green-700 font-semibold">
+                  ✅ Se copiarían: {comparacion.copiables} solicitudes
+                </p>
+                {comparacion.conflictos > 0 && (
+                  <p className="text-yellow-700 font-semibold">
+                    ⚠️ Se omitirían: {comparacion.conflictos} (por conflictos)
+                  </p>
+                )}
+              </div>
 
-        {/* Copiar Semana Anterior */}
-        <div className="bg-white rounded p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">
-            Copiar Semana Anterior
-          </h3>
-          <p className="text-sm text-gray-600 mb-4">
-            Copia todas las solicitudes disponibles. 
-            Omite automáticamente las que tengan conflictos.
-          </p>
-          <Button 
-            variant="primary" 
-            onClick={copiarSemanaAnterior}
-            disabled={loading}
-          >
-            {loading ? 'Copiando...' : '📋 Copiar'}
-          </Button>
-        </div>
+              {comparacion.conflictos === 0 && comparacion.copiables > 0 && (
+                <div className="bg-green-100 border border-green-300 rounded p-3 mt-3">
+                  <p className="text-sm text-green-800 font-semibold">
+                    ✅ No hay conflictos. Puedes copiar toda la semana anterior
+                  </p>
+                </div>
+              )}
 
-        {/* Limpiar Semana Actual */}
-        <div className="bg-white rounded p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">
-            Limpiar Semana Actual
-          </h3>
-          <p className="text-sm text-gray-600 mb-4">
-            Elimina TODAS las solicitudes de esta semana. 
-            Útil para empezar de cero.
-          </p>
-          <Button 
-            variant="danger" 
-            onClick={limpiarSemana}
-            disabled={loading}
-          >
-            {loading ? 'Limpiando...' : '🗑️ Limpiar'}
-          </Button>
+              <div className="flex gap-3 mt-4">
+                {comparacion.copiables > 0 && (
+                  <Button variant="primary" onClick={copiarSemana} disabled={loading}>
+                    Copiar Semana Anterior
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowComparacion(false)}
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Limpiar semana */}
+          <div className="pt-4 border-t">
+            <Button
+              variant="danger"
+              onClick={limpiarSemana}
+              disabled={loading}
+            >
+              🗑️ Limpiar Semana
+            </Button>
+            <p className="text-sm text-red-600 mt-2">
+              Elimina TODAS las solicitudes de esta semana (no se puede deshacer)
+            </p>
+          </div>
+
         </div>
-      </div>
-    </div>
+      </Card>
+
+      {/* Modal */}
+      <Modal
+        isOpen={modal.isOpen}
+        onClose={() => setModal({...modal, isOpen: false})}
+        title={modal.title}
+        type={modal.type}
+        showCancel={modal.showCancel}
+        onConfirm={modal.onConfirm}
+      >
+        <p className="whitespace-pre-line">{modal.message}</p>
+      </Modal>
+    </>
   );
 }

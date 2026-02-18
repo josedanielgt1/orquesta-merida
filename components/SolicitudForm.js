@@ -38,10 +38,19 @@ export default function SolicitudForm({ userId, userName, onSuccess }) {
 
   const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   
-  const horarios = [
-    '08:00', '09:00', '10:00', '11:00', '12:00',
-    '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'
-  ];
+  // Horarios con incrementos de 15 minutos
+  const generarHorarios = () => {
+    const horarios = [];
+    for (let h = 8; h <= 18; h++) {
+      for (let m of [0, 15, 30, 45]) {
+        if (h === 18 && m > 0) break;
+        horarios.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+      }
+    }
+    return horarios;
+  };
+
+  const horarios = generarHorarios();
 
   const toggleDia = (dia) => {
     if (formData.dias.includes(dia)) {
@@ -145,16 +154,7 @@ export default function SolicitudForm({ userId, userName, onSuccess }) {
         type: 'success'
       });
 
-      setFormData({
-        dias: [],
-        horaInicio: '',
-        horaFin: '',
-        tipoClase: 'individual',
-        observaciones: '',
-        fechaInicio: formatearFechaInput(new Date()),
-        fechaFin: formatearFechaInput(new Date())
-      });
-      setPreview(null);
+      // NO resetear aquí - se resetea al cerrar el modal
 
     } catch (err) {
       console.error('Error:', err);
@@ -171,8 +171,23 @@ export default function SolicitudForm({ userId, userName, onSuccess }) {
 
   const handleModalClose = () => {
     setModal({...modal, isOpen: false});
-    if (modal.type === 'success' && onSuccess) {
-      onSuccess();
+    
+    // Si fue exitoso, resetear el formulario
+    if (modal.type === 'success') {
+      setFormData({
+        dias: [],
+        horaInicio: '',
+        horaFin: '',
+        tipoClase: 'individual',
+        observaciones: '',
+        fechaInicio: formatearFechaInput(new Date()),
+        fechaFin: formatearFechaInput(new Date())
+      });
+      setPreview(null);
+      
+      if (onSuccess) {
+        onSuccess();
+      }
     }
   };
 
@@ -328,58 +343,83 @@ export default function SolicitudForm({ userId, userName, onSuccess }) {
 
         {/* Preview de semanas */}
         {preview && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-bold text-blue-900 mb-3">
+          <div className="mb-6 bg-blue-50 border-2 border-blue-300 rounded-lg p-5">
+            <h3 className="font-bold text-blue-900 mb-4 text-lg">
               📋 Vista previa - {preview.totalSolicitudes} clases a solicitar:
             </h3>
-            <div className="max-h-48 overflow-y-auto space-y-2">
+            
+            <div className="bg-white rounded-lg p-4 mb-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600 font-semibold">Días:</p>
+                  <p className="text-gray-900">{preview.dias.join(', ')}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 font-semibold">Horario:</p>
+                  <p className="text-gray-900">{preview.horaInicio} - {preview.horaFin}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 font-semibold">Desde:</p>
+                  <p className="text-gray-900">{formatearFecha(parsearFechaInput(formData.fechaInicio))}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 font-semibold">Hasta:</p>
+                  <p className="text-gray-900">{formatearFecha(parsearFechaInput(formData.fechaFin))}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="max-h-56 overflow-y-auto space-y-2 mb-4">
               {preview.semanas.map((semana, idx) => (
-                <div key={idx} className="bg-white rounded p-2 border border-blue-200">
+                <div key={idx} className="bg-white rounded-lg p-3 border border-blue-200">
                   <p className="text-sm font-semibold text-gray-900">
-                    Semana {idx + 1}: {semana.label}
+                    📅 Semana {idx + 1}: {semana.label}
                   </p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-xs text-gray-600 mt-1">
                     {preview.dias.join(', ')} · {preview.horaInicio} - {preview.horaFin}
                   </p>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-blue-700 mt-3">
-              ✓ Se crearán {preview.totalSolicitudes} solicitudes pendientes de aprobación
-            </p>
+            
+            <div className="bg-green-100 border border-green-300 rounded-lg p-3">
+              <p className="text-sm text-green-800 font-semibold">
+                ✓ Total: {preview.totalSolicitudes} solicitudes pendientes de aprobación
+              </p>
+            </div>
           </div>
         )}
 
         {/* Botones */}
-        <div className="flex gap-3">
+        <div className="space-y-3">
           {!preview ? (
             <button
               type="button"
               onClick={calcularPreview}
-              className="flex-1 py-3 bg-blue-100 text-blue-700 rounded-lg font-semibold hover:bg-blue-200 transition-all"
+              className="w-full py-3 bg-blue-100 text-blue-700 rounded-lg font-semibold hover:bg-blue-200 transition-all text-lg"
             >
-              👁️ Ver preview
+              👁️ Ver Preview
             </button>
           ) : (
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all disabled:opacity-50"
-            >
-              {loading ? 'Enviando...' : `✅ Confirmar ${preview.totalSolicitudes} solicitudes`}
-            </button>
+            <>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all disabled:opacity-50 text-lg"
+              >
+                {loading ? 'Enviando...' : `✅ Confirmar y Enviar ${preview.totalSolicitudes} Solicitudes`}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                className="w-full py-2 text-gray-600 text-sm hover:text-gray-800 font-semibold"
+              >
+                ← Modificar Solicitud
+              </button>
+            </>
           )}
         </div>
-
-        {preview && (
-          <button
-            type="button"
-            onClick={() => setPreview(null)}
-            className="w-full mt-2 py-2 text-gray-500 text-sm hover:text-gray-700"
-          >
-            ← Modificar solicitud
-          </button>
-        )}
       </form>
 
       {/* Modal */}
