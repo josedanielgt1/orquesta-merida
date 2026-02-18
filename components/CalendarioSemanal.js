@@ -20,16 +20,16 @@ export default function CalendarioSemanal({ solicitudes, profesorView = false })
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 overflow-x-auto">
-      <h2 className="text-2xl font-bold mb-6">
+      <h2 className="text-2xl font-bold mb-6 text-gray-900">
         {profesorView ? 'Mi Horario Semanal' : 'Horarios Aprobados'}
       </h2>
       
       <div className="min-w-[800px]">
         {/* Header con días */}
         <div className="grid grid-cols-7 gap-2 mb-2">
-          <div className="font-bold text-center p-2 bg-gray-100 rounded">Hora</div>
+          <div className="font-bold text-center p-2 bg-gray-100 rounded text-blue-900">Hora</div>
           {dias.map(dia => (
-            <div key={dia} className="font-bold text-center p-2 bg-blue-100 rounded">
+            <div key={dia} className="font-bold text-center p-2 bg-blue-100 rounded text-gray-900">
               {dia}
             </div>
           ))}

@@ -17,6 +17,7 @@ export default function ProfesorDashboard() {
   const [solicitudes, setSolicitudes] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [vistaActiva, setVistaActiva] = useState('solicitudes');
   const router = useRouter();
 
   useEffect(() => {
@@ -27,7 +28,6 @@ export default function ProfesorDashboard() {
     }
 
     const parsedUser = JSON.parse(userData);
-    
     if (parsedUser.role !== 'profesor') {
       router.push('/dashboard/master');
       return;
@@ -35,24 +35,21 @@ export default function ProfesorDashboard() {
 
     setUser(parsedUser);
 
-    // Escuchar solicitudes del profesor
     const q = query(
       collection(db, 'requests'),
       where('profesorId', '==', parsedUser.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log('📊 Solicitudes recibidas:', snapshot.size);
-      const solicitudesData = [];
+      const data = [];
       snapshot.forEach((doc) => {
-        const data = { id: doc.id, ...doc.data() };
-        console.log('📄 Solicitud:', data);
-        solicitudesData.push(data);
+        data.push({ id: doc.id, ...doc.data() });
       });
-      setSolicitudes(solicitudesData);
-      setLoading(false);
-    }, (error) => {
-      console.error('❌ Error cargando solicitudes:', error);
+      data.sort((a, b) => {
+        if (!a.semanaId || !b.semanaId) return 0;
+        return a.semanaId.localeCompare(b.semanaId);
+      });
+      setSolicitudes(data);
       setLoading(false);
     });
 
@@ -75,84 +72,161 @@ export default function ProfesorDashboard() {
 
   if (!user) return <Loading message="Cargando panel..." />;
 
+  // Stats
   const pendientes = solicitudes.filter(s => s.estado === 'pendiente').length;
   const aprobadas = solicitudes.filter(s => s.estado === 'aprobada').length;
+  const rechazadas = solicitudes.filter(s => s.estado === 'rechazada').length;
   const horasSemanales = solicitudes
     .filter(s => s.estado === 'aprobada')
     .reduce((total, s) => {
-      const inicio = parseInt(s.horaInicio.split(':')[0]);
-      const fin = parseInt(s.horaFin.split(':')[0]);
+      const inicio = parseInt(s.horaInicio?.split(':')[0] || 0);
+      const fin = parseInt(s.horaFin?.split(':')[0] || 0);
       return total + (fin - inicio);
     }, 0);
 
+  // Agrupar solicitudes por grupoId
+  const solicitudesAgrupadas = [];
+  const gruposVistos = new Set();
+
+  solicitudes.forEach(sol => {
+    if (sol.esSolicitudGrupo && sol.grupoId) {
+      if (!gruposVistos.has(sol.grupoId)) {
+        gruposVistos.add(sol.grupoId);
+        const delGrupo = solicitudes.filter(s => s.grupoId === sol.grupoId);
+        solicitudesAgrupadas.push({
+          esGrupo: true,
+          grupoId: sol.grupoId,
+          solicitudes: delGrupo,
+          dia: sol.dia,
+          grupoDias: sol.grupoDias,
+          horaInicio: sol.horaInicio,
+          horaFin: sol.horaFin,
+          tipoClase: sol.tipoClase,
+          observaciones: sol.observaciones,
+          grupoFechaInicio: sol.grupoFechaInicio,
+          grupoFechaFin: sol.grupoFechaFin,
+        });
+      }
+    } else {
+      solicitudesAgrupadas.push({
+        esGrupo: false,
+        solicitudes: [sol],
+        ...sol
+      });
+    }
+  });
+
   return (
     <div className="min-h-screen bg-gray-100">
+
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Mi Panel</h1>
-            <p className="text-gray-600">Bienvenido, {user.name}</p>
+      <header className="bg-white shadow sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🎼</span>
+              <div>
+                <p className="font-bold text-gray-900 leading-tight">Orquesta Sinfónica</p>
+                <p className="text-xs text-gray-500 leading-tight">de Mérida</p>
+              </div>
+            </div>
+
+            <nav className="hidden md:flex items-center gap-2">
+              <button
+                onClick={() => { setVistaActiva('solicitudes'); setShowForm(false); }}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  vistaActiva === 'solicitudes'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                📋 Mis Solicitudes
+              </button>
+              <button
+                onClick={() => { setVistaActiva('calendario'); setShowForm(false); }}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  vistaActiva === 'calendario'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                📅 Mi Calendario
+              </button>
+            </nav>
+
+            <div className="flex items-center gap-3">
+              <div className="hidden md:block text-right">
+                <p className="text-sm font-semibold text-gray-900">{user.name}</p>
+                <p className="text-xs text-gray-500">Profesor</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-100 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-200"
+              >
+                Cerrar Sesión
+              </button>
+            </div>
           </div>
-          <Button variant="secondary" onClick={handleLogout}>
-            Cerrar Sesión
-          </Button>
+
+          <div className="md:hidden flex gap-2 pb-3">
+            <button
+              onClick={() => setVistaActiva('solicitudes')}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                vistaActiva === 'solicitudes' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              📋 Solicitudes
+            </button>
+            <button
+              onClick={() => setVistaActiva('calendario')}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                vistaActiva === 'calendario' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              📅 Calendario
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-gray-500 text-sm font-semibold mb-2">
-              Solicitudes Pendientes
-            </h3>
-            <p className="text-4xl font-bold text-yellow-600">{pendientes}</p>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-gray-500 text-xs font-semibold mb-1">Pendientes</h3>
+            <p className="text-3xl font-bold text-yellow-500">{pendientes}</p>
           </div>
-          
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-gray-500 text-sm font-semibold mb-2">
-              Horarios Aprobados
-            </h3>
-            <p className="text-4xl font-bold text-green-600">{aprobadas}</p>
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-gray-500 text-xs font-semibold mb-1">Aprobadas</h3>
+            <p className="text-3xl font-bold text-green-600">{aprobadas}</p>
           </div>
-          
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-gray-500 text-sm font-semibold mb-2">
-              Horas Semanales
-            </h3>
-            <p className="text-4xl font-bold text-blue-600">{horasSemanales}h</p>
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-gray-500 text-xs font-semibold mb-1">Rechazadas</h3>
+            <p className="text-3xl font-bold text-red-500">{rechazadas}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-gray-500 text-xs font-semibold mb-1">Horas aprobadas</h3>
+            <p className="text-3xl font-bold text-blue-600">{horasSemanales}h</p>
           </div>
         </div>
 
-        {/* Exportar PDF */}
-        {aprobadas > 0 && (
-          <div className="bg-green-50 rounded-lg shadow p-4 mb-8 flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900">Mi Horario en PDF</h3>
-              <p className="text-sm text-gray-600">Descarga tu horario semanal</p>
-            </div>
-            <Button variant="primary" onClick={exportarMiHorario}>
-              📄 Descargar Mi Horario
-            </Button>
-          </div>
-        )}
-
-        {/* Botón Nueva Solicitud */}
-        <div className="mb-8">
-          <Button 
-            variant="primary" 
-            onClick={() => setShowForm(!showForm)}
-          >
-            {showForm ? 'Cancelar' : '+ Nueva Solicitud de Horario'}
+        {/* Botones */}
+        <div className="flex gap-4 mb-8 flex-wrap">
+          <Button variant="primary" onClick={() => { setShowForm(!showForm); setVistaActiva('solicitudes'); }}>
+            {showForm ? '✕ Cancelar' : '+ Nueva Solicitud'}
           </Button>
+          {aprobadas > 0 && (
+            <Button variant="secondary" onClick={exportarMiHorario}>
+              📄 Descargar Mi Horario PDF
+            </Button>
+          )}
         </div>
 
-        {/* Formulario de solicitud */}
+        {/* Formulario */}
         {showForm && (
           <div className="mb-8">
-            <SolicitudForm 
+            <SolicitudForm
               userId={user.uid}
               userName={user.name}
               onSuccess={() => setShowForm(false)}
@@ -160,105 +234,207 @@ export default function ProfesorDashboard() {
           </div>
         )}
 
-        {/* Mis Solicitudes */}
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4 text-gray-900">Mis Solicitudes</h2>
-          
-          {loading ? (
-            <p className="text-gray-500">Cargando solicitudes...</p>
-          ) : solicitudes.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500 mb-4">No tienes solicitudes aún. ¡Crea una!</p>
-              <Button variant="primary" onClick={() => setShowForm(true)}>
-                + Nueva Solicitud
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {solicitudes.map(solicitud => {
-                // Formatear fecha de semana
-                let semanaTexto = '';
-                if (solicitud.semanaInicio) {
-                  try {
-                    let fecha;
-                    if (solicitud.semanaInicio.toDate) {
-                      fecha = solicitud.semanaInicio.toDate();
-                    } else {
-                      fecha = new Date(solicitud.semanaInicio);
-                    }
-                    semanaTexto = fecha.toLocaleDateString('es-ES', { 
-                      day: '2-digit', 
-                      month: '2-digit', 
-                      year: 'numeric' 
-                    });
-                  } catch (err) {
-                    console.error('Error formateando fecha:', err);
-                  }
-                }
+        {/* VISTA: SOLICITUDES */}
+        {vistaActiva === 'solicitudes' && !showForm && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">
+              Mis Solicitudes ({solicitudes.length})
+            </h2>
 
-                return (
-                  <div 
-                    key={solicitud.id}
-                    className={`border-l-4 pl-4 py-3 ${
-                      solicitud.estado === 'pendiente' ? 'border-yellow-500 bg-yellow-50' :
-                      solicitud.estado === 'aprobada' ? 'border-green-500 bg-green-50' :
-                      'border-red-500 bg-red-50'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        {/* Semana */}
+            {loading ? (
+              <p className="text-gray-500">Cargando...</p>
+            ) : solicitudesAgrupadas.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-5xl mb-4">📭</p>
+                <p className="text-gray-500 text-lg mb-4">No tienes solicitudes aún</p>
+                <Button variant="primary" onClick={() => setShowForm(true)}>
+                  + Crear mi primera solicitud
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {solicitudesAgrupadas.map((item, idx) => {
+                  if (item.esGrupo) {
+                    const total = item.solicitudes.length;
+                    const aprobadas = item.solicitudes.filter(s => s.estado === 'aprobada').length;
+                    const pendientes = item.solicitudes.filter(s => s.estado === 'pendiente').length;
+                    const rechazadas = item.solicitudes.filter(s => s.estado === 'rechazada').length;
+
+                    const fechaInicioText = item.grupoFechaInicio?.toDate
+                      ? item.grupoFechaInicio.toDate().toLocaleDateString('es-ES')
+                      : item.grupoFechaInicio
+                        ? new Date(item.grupoFechaInicio).toLocaleDateString('es-ES')
+                        : '';
+
+                    const fechaFinText = item.grupoFechaFin?.toDate
+                      ? item.grupoFechaFin.toDate().toLocaleDateString('es-ES')
+                      : item.grupoFechaFin
+                        ? new Date(item.grupoFechaFin).toLocaleDateString('es-ES')
+                        : '';
+
+                    return (
+                      <div key={item.grupoId} className="border-2 border-purple-200 rounded-xl p-5 bg-purple-50">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <span className="inline-block text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full font-bold mb-2">
+                              📅 Solicitud por rango · {total} semanas
+                            </span>
+                            <h3 className="text-lg font-bold text-gray-900">
+                              {item.grupoDias?.join(' + ')} · {item.horaInicio} - {item.horaFin}
+                            </h3>
+                            <p className="text-sm text-gray-600 capitalize">
+                              Clase {item.tipoClase}
+                            </p>
+                            {fechaInicioText && (
+                              <p className="text-sm text-purple-700 font-semibold mt-1">
+                                📆 {fechaInicioText} → {fechaFinText}
+                              </p>
+                            )}
+                            {item.observaciones && (
+                              <p className="text-xs text-gray-500 mt-1">📝 {item.observaciones}</p>
+                            )}
+                          </div>
+
+                          <div className="text-right text-sm space-y-1">
+                            {aprobadas > 0 && (
+                              <p className="text-green-600 font-semibold">✓ {aprobadas} aprobadas</p>
+                            )}
+                            {pendientes > 0 && (
+                              <p className="text-yellow-600 font-semibold">⏳ {pendientes} pendientes</p>
+                            )}
+                            {rechazadas > 0 && (
+                              <p className="text-red-600 font-semibold">✗ {rechazadas} rechazadas</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          {item.solicitudes.map(sol => {
+                            let semanaTexto = '';
+                            if (sol.semanaInicio) {
+                              try {
+                                const fecha = sol.semanaInicio.toDate
+                                  ? sol.semanaInicio.toDate()
+                                  : new Date(sol.semanaInicio);
+                                semanaTexto = fecha.toLocaleDateString('es-ES', {
+                                  day: '2-digit', month: '2-digit', year: 'numeric'
+                                });
+                              } catch {}
+                            }
+
+                            return (
+                              <div
+                                key={sol.id}
+                                className={`flex items-center justify-between px-4 py-2 rounded-lg border ${
+                                  sol.estado === 'aprobada'
+                                    ? 'bg-green-50 border-green-200'
+                                    : sol.estado === 'rechazada'
+                                    ? 'bg-red-50 border-red-200'
+                                    : 'bg-white border-gray-200'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="text-lg">
+                                    {sol.estado === 'aprobada' ? '✅' :
+                                     sol.estado === 'rechazada' ? '❌' : '⏳'}
+                                  </span>
+                                  <div>
+                                    <p className="text-sm font-semibold text-gray-900">
+                                      {sol.dia} · Semana del {semanaTexto}
+                                    </p>
+                                    {sol.estado === 'aprobada' && (
+                                      <p className="text-xs text-green-700 font-semibold">
+                                        Espacio {sol.espacioAsignado}
+                                      </p>
+                                    )}
+                                    {sol.estado === 'rechazada' && sol.notasAdmin && (
+                                      <p className="text-xs text-red-600">
+                                        {sol.notasAdmin}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                  sol.estado === 'aprobada'
+                                    ? 'bg-green-100 text-green-700'
+                                    : sol.estado === 'rechazada'
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                  {sol.estado === 'aprobada' ? 'Aprobada' :
+                                   sol.estado === 'rechazada' ? 'Rechazada' : 'Pendiente'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    const sol = item.solicitudes[0];
+                    let semanaTexto = '';
+                    if (sol.semanaInicio) {
+                      try {
+                        const fecha = sol.semanaInicio.toDate
+                          ? sol.semanaInicio.toDate()
+                          : new Date(sol.semanaInicio);
+                        semanaTexto = fecha.toLocaleDateString('es-ES', {
+                          day: '2-digit', month: '2-digit', year: 'numeric'
+                        });
+                      } catch {}
+                    }
+
+                    return (
+                      <div
+                        key={sol.id}
+                        className={`border-l-4 pl-4 py-4 rounded-r-lg ${
+                          sol.estado === 'pendiente'
+                            ? 'border-yellow-500 bg-yellow-50'
+                            : sol.estado === 'aprobada'
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-red-500 bg-red-50'
+                        }`}
+                      >
                         {semanaTexto && (
                           <p className="text-xs text-gray-500 mb-1">
                             📅 Semana del {semanaTexto}
                           </p>
                         )}
-                        
-                        {/* Día y Horario */}
-                        <p className="font-semibold text-lg text-gray-900">
-                          {solicitud.dia} {solicitud.horaInicio} - {solicitud.horaFin}
+                        <p className="font-bold text-lg text-gray-900">
+                          {sol.dia} · {sol.horaInicio} - {sol.horaFin}
                         </p>
-                        
-                        {/* Tipo de clase */}
                         <p className="text-sm text-gray-600 capitalize">
-                          Clase {solicitud.tipoClase}
+                          Clase {sol.tipoClase}
                         </p>
-                        
-                        {/* Observaciones */}
-                        {solicitud.observaciones && (
-                          <p className="text-sm text-gray-500 mt-1">
-                            📝 {solicitud.observaciones}
-                          </p>
+                        {sol.observaciones && (
+                          <p className="text-sm text-gray-500 mt-1">📝 {sol.observaciones}</p>
                         )}
-                        
-                        {/* Estado */}
-                        <p className={`text-sm font-semibold mt-2 ${
-                          solicitud.estado === 'pendiente' ? 'text-yellow-600' :
-                          solicitud.estado === 'aprobada' ? 'text-green-600' :
-                          'text-red-600'
+                        <p className={`text-sm font-bold mt-2 ${
+                          sol.estado === 'pendiente' ? 'text-yellow-600' :
+                          sol.estado === 'aprobada' ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          {solicitud.estado === 'pendiente' && '⏳ Pendiente de aprobación'}
-                          {solicitud.estado === 'aprobada' && `✓ Aprobada - Espacio ${solicitud.espacioAsignado}`}
-                          {solicitud.estado === 'rechazada' && `✗ Rechazada${solicitud.notasAdmin ? ` - ${solicitud.notasAdmin}` : ''}`}
+                          {sol.estado === 'pendiente' && '⏳ Pendiente de aprobación'}
+                          {sol.estado === 'aprobada' && `✓ Aprobada - Espacio ${sol.espacioAsignado}`}
+                          {sol.estado === 'rechazada' && `✗ Rechazada${sol.notasAdmin ? ` - ${sol.notasAdmin}` : ''}`}
                         </p>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Calendario Semanal */}
-        {aprobadas > 0 && (
-          <div className="mt-8">
-            <CalendarioSemanal 
-              solicitudes={solicitudes}
-              profesorView={true}
-            />
+                    );
+                  }
+                })}
+              </div>
+            )}
           </div>
         )}
+
+        {/* VISTA: CALENDARIO */}
+        {vistaActiva === 'calendario' && (
+          <CalendarioSemanal
+            solicitudes={solicitudes}
+            profesorView={true}
+          />
+        )}
+
       </main>
     </div>
   );
