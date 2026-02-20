@@ -12,6 +12,8 @@ import Loading from '@/components/ui/Loading';
 import Modal from '@/components/ui/Modal';
 import SolicitudForm from '@/components/SolicitudForm';
 import CalendarioSemanal from '@/components/CalendarioSemanal';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
+import { useLogoutOnClose } from '@/hooks/useLogoutOnClose';
 
 export default function ProfesorDashboard() {
   const [user, setUser] = useState(null);
@@ -28,6 +30,8 @@ export default function ProfesorDashboard() {
     showCancel: false,
     onConfirm: null
   });
+  useSessionTimeout(30);
+  useLogoutOnClose();
   const router = useRouter();
 
   useEffect(() => {

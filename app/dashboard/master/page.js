@@ -17,6 +17,8 @@ import SelectorSemana from '@/components/SelectorSemana';
 import GestionSemanas from '@/components/GestionSemanas';
 import NavBar from '@/components/NavBar';
 import { emailSolicitudAprobada, emailSolicitudRechazada } from '@/utils/emailTemplates';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
+import { useLogoutOnClose } from '@/hooks/useLogoutOnClose';
 
 export default function MasterDashboard() {
   const [user, setUser] = useState(null);
@@ -31,6 +33,8 @@ export default function MasterDashboard() {
     message: '',
     type: 'info'
   });
+  useSessionTimeout(30); 
+  useLogoutOnClose();
   const router = useRouter();
 
   useEffect(() => {

@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 export default function Home() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallButton, setShowInstallButton] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -20,15 +22,46 @@ export default function Home() {
         router.push('/dashboard/profesor');
       }
     }
-  }, [router]);
+    // Detectar si PWA es instalable
+    const handleBeforeInstallPrompt = (e) => {
+        // Prevenir que Chrome muestre el prompt automáticamente
+        e.preventDefault();
+         // Guardar el evento para usarlo después
+        setDeferredPrompt(e);
+         // Mostrar botón de instalación
+        setShowInstallButton(true);
+    };
 
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    // Detectar si ya está instalada
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+     setShowInstallButton(false);
+    }
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  },  [router]);
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) {
+      alert('La aplicación ya está instalada o no está disponible para instalar en este momento.');
+      return;
+    }
+    // Mostrar prompt de instalación
+    deferredPrompt.prompt();
+
+    // Esperar la respuesta del usuario
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      console.log('Usuario aceptó la instalación');
+      } else {
+      console.log('Usuario rechazó la instalación');
+      }
+      // Limpiar el prompt
+      setDeferredPrompt(null);
+     setShowInstallButton(false);
+    
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
@@ -78,6 +111,15 @@ export default function Home() {
             >
               Comenzar →
             </button>
+            {showInstallButton && (
+              <button
+                onClick={handleInstallClick}
+                className="px-8 py-4 bg-white text-blue-600 border-2 border-blue-600 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all flex items-center gap-2"
+              >
+                <span>📱</span>
+                Instalar App
+              </button>
+            )}
           </div>
         </div>
 
