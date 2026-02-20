@@ -273,6 +273,7 @@ export default function ProfesorDashboard() {
             <SolicitudForm
               userId={user.uid}
               userName={user.name}
+              userEmail={user.email}
               onSuccess={() => setShowForm(false)}
             />
           </div>

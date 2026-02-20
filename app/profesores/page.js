@@ -8,6 +8,7 @@ import NavBar from '@/components/NavBar';
 import Loading from '@/components/ui/Loading';
 import GestionUsuarios from '@/components/GestionUsuarios';
 
+
 export default function ProfesoresPage() {
   const [user, setUser] = useState(null);
   const router = useRouter();

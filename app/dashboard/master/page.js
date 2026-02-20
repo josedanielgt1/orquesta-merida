@@ -16,6 +16,7 @@ import BuscadorEspacios from '@/components/BuscadorEspacios';
 import SelectorSemana from '@/components/SelectorSemana';
 import GestionSemanas from '@/components/GestionSemanas';
 import NavBar from '@/components/NavBar';
+import { emailSolicitudAprobada, emailSolicitudRechazada } from '@/utils/emailTemplates';
 
 export default function MasterDashboard() {
   const [user, setUser] = useState(null);
@@ -23,6 +24,7 @@ export default function MasterDashboard() {
   const [espacios, setEspacios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [semanaActual, setSemanaActual] = useState(obtenerInicioSemana(new Date()));
+  const [rechazarData, setRechazarData] = useState(null);
   const [modal, setModal] = useState({
     isOpen: false,
     title: '',
@@ -118,15 +120,38 @@ export default function MasterDashboard() {
       });
       return;
     }
-
+      // aprobar en Firestore
     try {
       await updateDoc(doc(db, 'requests', solicitud.id), {
         estado: 'aprobada',
         espacioAsignado: espacio,
         fechaAprobacion: serverTimestamp()
       });
+      // Enviar Email al Profesor
+      const solicitudActualizada = {
+       ...solicitud,
+       espacioAsignado: espacio
+      };
+
+      const htmlEmail = emailSolicitudAprobada(
+         { name: solicitud.profesorName },
+         solicitudActualizada
+      );
+      //enviar email(no bloqueante)
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: solicitud.profesorEmail || solicitud.email,
+          subject: `✅ Solicitud Aprobada - ${solicitud.dia} ${solicitud.horaInicio}-${solicitud.horaFin}`,
+          html: htmlEmail
+       })  
+     }).catch(err => console.error('Error enviando email:', err)); 
       
-      setModal({
+      
+      
+       setModal({
+        
         isOpen: true,
         title: '✅ Solicitud aprobada',
         message: `La solicitud de ${solicitud.profesorName} para el ${solicitud.dia} ha sido aprobada en el espacio ${espacio}.`,
@@ -143,21 +168,46 @@ export default function MasterDashboard() {
     }
   };
 
-  const rechazarSolicitud = async (solicitudId) => {
-    const motivo = prompt('Motivo del rechazo (opcional):');
+  const rechazarSolicitud = async (solicitudId, solicitud) => {
+    setRechazarData({ solicitudId, solicitud });
+  };
+  const confirmarRechazo = async (motivo) => {
+    if (!rechazarData) return;
     
+    const { solicitudId, solicitud } = rechazarData;
+    setRechazarData(null);
+
     try {
       await updateDoc(doc(db, 'requests', solicitudId), {
         estado: 'rechazada',
         notasAdmin: motivo || 'Sin motivo especificado',
         fechaAprobacion: serverTimestamp()
       });
-      
+
+      //enviar Email al profesor
+      const htmlEmail = emailSolicitudRechazada(
+        { name: solicitud.profesorName },
+         solicitud,
+         motivo || 'Sin motivo especificado'
+      );
+       // Enviar email (no bloqueante)
+       fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: solicitud.profesorEmail || solicitud.email,
+          subject: `❌ Solicitud Rechazada - ${solicitud.dia} ${solicitud.horaInicio}-${solicitud.horaFin}`,
+          html: htmlEmail
+        })
+      }).catch(err => console.error('Error enviando email:', err));
+
       setModal({
         isOpen: true,
         title: 'Solicitud rechazada',
         message: 'La solicitud ha sido rechazada correctamente.',
-        type: 'info'
+        type: 'info',
+        showCancel: false,
+        onConfirm:null
       });
     } catch (err) {
       console.error('Error:', err);
@@ -165,7 +215,9 @@ export default function MasterDashboard() {
         isOpen: true,
         title: 'Error',
         message: 'Ocurrió un error al rechazar la solicitud.',
-        type: 'error'
+        type: 'error',
+        showCancel: false,
+        onConfirm: null
       });
     }
   };
@@ -369,8 +421,47 @@ export default function MasterDashboard() {
         </div>
 
       </main>
+      {/* Modal de rechazo con input */}
+      {rechazarData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">
+              ⚠️ Rechazar solicitud
+            </h3>
 
-      {/* Modal */}
+            <p className="text-gray-700 mb-4">
+              ¿Motivo del rechazo? (opcional)
+            </p>
+            <textarea
+             id="motivoRechazo"
+             rows="3"
+             placeholder="Ej: Espacio no disponible, conflicto de horario..."
+             className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+               onClick={() => setRechazarData(null)}
+               className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200"
+               >
+                Cancelar
+              </button>
+               <button
+               onClick={() => {
+                const motivo = document.getElementById('motivoRechazo').value;
+                  confirmarRechazo(motivo);
+               }}
+               className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700"
+              >
+                Rechazar
+              </button>
+             </div>
+            </div>
+           </div>
+          )}
+
+
+
+         {/* Modal */}
       <Modal
         isOpen={modal.isOpen}
         onClose={() => setModal({...modal, isOpen: false})}
@@ -509,7 +600,7 @@ function SolicitudCard({ solicitud, espacios, solicitudesAprobadas, onAprobar, o
             </Button>
             <Button
               variant="danger"
-              onClick={() => onRechazar(solicitud.id)}
+              onClick={() => onRechazar(solicitud.id, solicitud)}
             >
               ✗ Rechazar
             </Button>

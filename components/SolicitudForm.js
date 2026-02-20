@@ -15,7 +15,7 @@ import Card from './ui/Card';
 import Button from './ui/Button';
 import Modal from './ui/Modal';
 
-export default function SolicitudForm({ userId, userName, onSuccess }) {
+export default function SolicitudForm({ userId, userName, userEmail, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
@@ -123,6 +123,7 @@ export default function SolicitudForm({ userId, userName, onSuccess }) {
             addDoc(collection(db, 'requests'), {
               profesorId: userId,
               profesorName: userName,
+              profesorEmail: userEmail,
               dia: dia,
               horaInicio: formData.horaInicio,
               horaFin: formData.horaFin,
@@ -401,14 +402,14 @@ export default function SolicitudForm({ userId, userName, onSuccess }) {
               👁️ Ver Preview
             </button>
           ) : (
-            <>
-              <button
+            <div className="space-y-3">
+             <button
                 type="submit"
                 disabled={loading}
                 className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all disabled:opacity-50 text-lg"
-              >
+               >
                 {loading ? 'Enviando...' : `✅ Confirmar y Enviar ${preview.totalSolicitudes} Solicitudes`}
-              </button>
+             </button>
               
               <button
                 type="button"
@@ -417,7 +418,7 @@ export default function SolicitudForm({ userId, userName, onSuccess }) {
               >
                 ← Modificar Solicitud
               </button>
-            </>
+            </div>             
           )}
         </div>
       </form>

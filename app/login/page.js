@@ -31,9 +31,10 @@ export default function LoginPage() {
       
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        if(userData.activo=== false) {
-          setError('Tu cuenta ha sido desactivada. Contacta al administrador');
+        if (userData.role === 'profesor' && userData.activo === false) {
           await signOut (auth);
+          setError('Tu cuenta ha sido desactivada. Contacta al administrador');
+          
           setLoading (false);
           return;
 
