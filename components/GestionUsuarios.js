@@ -9,9 +9,11 @@ import Modal from './ui/Modal';
 
 export default function GestionUsuarios() {
   const [profesores, setProfesores] = useState([]);
+  const [administradores, setAdministradores] = useState([]);
   const [invitaciones, setInvitaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [vistaActiva, setVistaActiva] = useState('profesores'); // 'profesores' | 'administradores'
   const [modal, setModal] = useState({
     isOpen: false,
     title: '',
@@ -21,9 +23,10 @@ export default function GestionUsuarios() {
     onConfirm: null
   });
 
-  const [nuevoProfesor, setNuevoProfesor] = useState({
+  const [nuevoUsuario, setNuevoUsuario] = useState({
     name: '',
-    email: ''
+    email: '',
+    role: 'profesor' // 'profesor' | 'master'
   });
 
   useEffect(() => {
@@ -32,20 +35,28 @@ export default function GestionUsuarios() {
 
   const cargarDatos = async () => {
     try {
-      // Cargar profesores registrados
+      // Cargar usuarios registrados
       const usersSnapshot = await getDocs(collection(db, 'users'));
       const profesoresData = [];
+      const adminsData = [];
+      
       usersSnapshot.forEach(doc => {
         const data = doc.data();
+        const usuario = { 
+          id: doc.id, 
+          ...data,
+          activo: data.activo !== undefined ? data.activo : true
+        };
+        
         if (data.role === 'profesor') {
-          profesoresData.push({ 
-            id: doc.id, 
-            ...data,
-            activo: data.activo !== undefined ? data.activo : true // Por defecto activo
-          });
+          profesoresData.push(usuario);
+        } else if (data.role === 'master') {
+          adminsData.push(usuario);
         }
       });
+      
       setProfesores(profesoresData);
+      setAdministradores(adminsData);
 
       // Cargar invitaciones pendientes
       const invitacionesSnapshot = await getDocs(collection(db, 'invitations'));
@@ -62,30 +73,30 @@ export default function GestionUsuarios() {
     }
   };
 
-  const toggleEstadoProfesor = async (profesorId, estadoActual, nombreProfesor) => {
+  const toggleEstadoUsuario = async (usuarioId, estadoActual, nombreUsuario) => {
     const nuevoEstado = !estadoActual;
     const accion = nuevoEstado ? 'activar' : 'inactivar';
 
     setModal({
       isOpen: true,
-      title: `¿${accion.charAt(0).toUpperCase() + accion.slice(1)} profesor?`,
-      message: `¿Estás seguro de ${accion} a ${nombreProfesor}?\n\n${
+      title: `¿${accion.charAt(0).toUpperCase() + accion.slice(1)} usuario?`,
+      message: `¿Estás seguro de ${accion} a ${nombreUsuario}?\n\n${
         nuevoEstado 
-          ? 'Podrá iniciar sesión y crear solicitudes nuevamente.' 
-          : 'No podrá iniciar sesión ni crear solicitudes hasta que sea reactivado.'
+          ? 'Podrá iniciar sesión y usar el sistema nuevamente.' 
+          : 'No podrá iniciar sesión hasta que sea reactivado.'
       }`,
       type: 'confirm',
       showCancel: true,
       onConfirm: async () => {
         try {
-          await updateDoc(doc(db, 'users', profesorId), {
+          await updateDoc(doc(db, 'users', usuarioId), {
             activo: nuevoEstado
           });
 
           setModal({
             isOpen: true,
-            title: nuevoEstado ? '✅ Profesor activado' : '⚠️ Profesor inactivado',
-            message: `${nombreProfesor} ha sido ${nuevoEstado ? 'activado' : 'inactivado'} correctamente.`,
+            title: nuevoEstado ? '✅ Usuario activado' : '⚠️ Usuario inactivado',
+            message: `${nombreUsuario} ha sido ${nuevoEstado ? 'activado' : 'inactivado'} correctamente.`,
             type: nuevoEstado ? 'success' : 'warning',
             showCancel: false,
             onConfirm: null
@@ -97,7 +108,7 @@ export default function GestionUsuarios() {
           setModal({
             isOpen: true,
             title: 'Error',
-            message: 'No se pudo cambiar el estado del profesor.',
+            message: 'No se pudo cambiar el estado del usuario.',
             type: 'error',
             showCancel: false,
             onConfirm: null
@@ -110,7 +121,7 @@ export default function GestionUsuarios() {
   const enviarInvitacion = async (e) => {
     e.preventDefault();
 
-    if (!nuevoProfesor.name || !nuevoProfesor.email) {
+    if (!nuevoUsuario.name || !nuevoUsuario.email) {
       setModal({
         isOpen: true,
         title: 'Campos requeridos',
@@ -123,7 +134,7 @@ export default function GestionUsuarios() {
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(nuevoProfesor.email)) {
+    if (!emailRegex.test(nuevoUsuario.email)) {
       setModal({
         isOpen: true,
         title: 'Email inválido',
@@ -135,12 +146,15 @@ export default function GestionUsuarios() {
       return;
     }
 
-    const yaExiste = profesores.some(p => p.email === nuevoProfesor.email);
+    // Verificar en ambas listas
+    const todosUsuarios = [...profesores, ...administradores];
+    const yaExiste = todosUsuarios.some(u => u.email === nuevoUsuario.email);
+    
     if (yaExiste) {
       setModal({
         isOpen: true,
         title: 'Email ya registrado',
-        message: 'Ya existe un profesor con este email.',
+        message: 'Ya existe un usuario con este email.',
         type: 'warning',
         showCancel: false,
         onConfirm: null
@@ -148,7 +162,7 @@ export default function GestionUsuarios() {
       return;
     }
 
-    const invitacionPendiente = invitaciones.some(inv => inv.email === nuevoProfesor.email);
+    const invitacionPendiente = invitaciones.some(inv => inv.email === nuevoUsuario.email);
     if (invitacionPendiente) {
       setModal({
         isOpen: true,
@@ -170,8 +184,9 @@ export default function GestionUsuarios() {
       expira.setHours(expira.getHours() + 48);
 
       await addDoc(collection(db, 'invitations'), {
-        email: nuevoProfesor.email,
-        name: nuevoProfesor.name,
+        email: nuevoUsuario.email,
+        name: nuevoUsuario.name,
+        role: nuevoUsuario.role,
         token: token,
         usado: false,
         fechaCreacion: serverTimestamp(),
@@ -179,6 +194,8 @@ export default function GestionUsuarios() {
       });
 
       const enlaceRegistro = `${window.location.origin}/registro/${token}`;
+      
+      const tipoUsuario = nuevoUsuario.role === 'master' ? 'Administrador' : 'Profesor';
       
       const htmlEmail = `
         <!DOCTYPE html>
@@ -193,11 +210,11 @@ export default function GestionUsuarios() {
           </div>
           
           <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #667eea; margin-top: 0;">Invitación al Sistema</h2>
+            <h2 style="color: #667eea; margin-top: 0;">Invitación como ${tipoUsuario}</h2>
             
-            <p>Hola <strong>${nuevoProfesor.name}</strong>,</p>
+            <p>Hola <strong>${nuevoUsuario.name}</strong>,</p>
             
-            <p>Has sido invitado a unirte al sistema de gestión de espacios de la <strong>Orquesta Sinfónica de Mérida</strong>.</p>
+            <p>Has sido invitado a unirte al sistema de gestión de espacios de la <strong>Orquesta Sinfónica de Mérida</strong> como <strong>${tipoUsuario}</strong>.</p>
             
             <p>Para completar tu registro y crear tu contraseña, haz click en el siguiente botón:</p>
             
@@ -234,8 +251,8 @@ export default function GestionUsuarios() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: nuevoProfesor.email,
-          subject: '🎼 Invitación - Orquesta Sinfónica de Mérida',
+          to: nuevoUsuario.email,
+          subject: `🎼 Invitación como ${tipoUsuario} - Orquesta Sinfónica de Mérida`,
           html: htmlEmail
         })
       });
@@ -246,13 +263,13 @@ export default function GestionUsuarios() {
         setModal({
           isOpen: true,
           title: '✅ Invitación enviada',
-          message: `Se ha enviado una invitación a ${nuevoProfesor.email}.\n\nEl profesor recibirá un email con un enlace para completar su registro.`,
+          message: `Se ha enviado una invitación a ${nuevoUsuario.email}.\n\nEl usuario recibirá un email con un enlace para completar su registro.`,
           type: 'success',
           showCancel: false,
           onConfirm: null
         });
 
-        setNuevoProfesor({ name: '', email: '' });
+        setNuevoUsuario({ name: '', email: '', role: 'profesor' });
         setShowForm(false);
         cargarDatos();
       } else {
@@ -308,20 +325,60 @@ export default function GestionUsuarios() {
     });
   };
 
+  const usuariosActuales = vistaActiva === 'profesores' ? profesores : administradores;
+  const invitacionesActuales = invitaciones.filter(inv => 
+    vistaActiva === 'profesores' ? inv.role === 'profesor' : inv.role === 'master'
+  );
+
   return (
     <>
-      <Card title="Gestión de Profesores">
+      <Card title="Gestión de Usuarios">
+        {/* Pestañas */}
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          <button
+            onClick={() => {
+              setVistaActiva('profesores');
+              setShowForm(false);
+              setNuevoUsuario({ name: '', email: '', role: 'profesor' });
+            }}
+            className={`px-6 py-3 font-semibold transition-all ${
+              vistaActiva === 'profesores'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            👨‍🏫 Profesores ({profesores.length})
+          </button>
+          
+          <button
+            onClick={() => {
+              setVistaActiva('administradores');
+              setShowForm(false);
+              setNuevoUsuario({ name: '', email: '', role: 'master' });
+            }}
+            className={`px-6 py-3 font-semibold transition-all ${
+              vistaActiva === 'administradores'
+                ? 'text-purple-600 border-b-2 border-purple-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            👤 Administradores ({administradores.length})
+          </button>
+        </div>
+
         {/* Botón invitar */}
         <div className="mb-6">
           <Button variant="primary" onClick={() => setShowForm(!showForm)}>
-            {showForm ? '✕ Cancelar' : '+ Invitar Nuevo Profesor'}
+            {showForm ? '✕ Cancelar' : `+ Invitar Nuevo ${vistaActiva === 'profesores' ? 'Profesor' : 'Administrador'}`}
           </Button>
         </div>
 
         {/* Formulario de invitación */}
         {showForm && (
           <form onSubmit={enviarInvitacion} className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Enviar Invitación</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              Enviar Invitación {vistaActiva === 'profesores' ? 'a Profesor' : 'a Administrador'}
+            </h3>
             
             <div className="space-y-4">
               <div>
@@ -330,8 +387,8 @@ export default function GestionUsuarios() {
                 </label>
                 <input
                   type="text"
-                  value={nuevoProfesor.name}
-                  onChange={(e) => setNuevoProfesor({...nuevoProfesor, name: e.target.value})}
+                  value={nuevoUsuario.name}
+                  onChange={(e) => setNuevoUsuario({...nuevoUsuario, name: e.target.value})}
                   placeholder="Ej: Juan Pérez"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
                   required
@@ -344,9 +401,9 @@ export default function GestionUsuarios() {
                 </label>
                 <input
                   type="email"
-                  value={nuevoProfesor.email}
-                  onChange={(e) => setNuevoProfesor({...nuevoProfesor, email: e.target.value})}
-                  placeholder="Ej: profesor@gmail.com"
+                  value={nuevoUsuario.email}
+                  onChange={(e) => setNuevoUsuario({...nuevoUsuario, email: e.target.value})}
+                  placeholder={vistaActiva === 'profesores' ? 'profesor@gmail.com' : 'admin@orquesta.com'}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white"
                   required
                 />
@@ -354,7 +411,7 @@ export default function GestionUsuarios() {
 
               <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
                 <p className="text-sm text-yellow-800">
-                  ℹ️ El profesor recibirá un email con un enlace para crear su contraseña.
+                  ℹ️ El usuario recibirá un email con un enlace para crear su contraseña.
                 </p>
               </div>
 
@@ -366,13 +423,13 @@ export default function GestionUsuarios() {
         )}
 
         {/* Invitaciones pendientes */}
-        {invitaciones.length > 0 && (
+        {invitacionesActuales.length > 0 && (
           <div className="mb-6">
             <h3 className="text-lg font-bold text-gray-900 mb-3">
-              Invitaciones Pendientes ({invitaciones.length})
+              Invitaciones Pendientes ({invitacionesActuales.length})
             </h3>
             <div className="space-y-2">
-              {invitaciones.map(inv => (
+              {invitacionesActuales.map(inv => (
                 <div key={inv.id} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div>
                     <p className="font-semibold text-gray-900">{inv.name}</p>
@@ -393,40 +450,40 @@ export default function GestionUsuarios() {
           </div>
         )}
 
-        {/* Lista de profesores */}
+        {/* Lista de usuarios */}
         <div>
           <h3 className="text-lg font-bold text-gray-900 mb-3">
-            Profesores Registrados ({profesores.length})
+            {vistaActiva === 'profesores' ? 'Profesores' : 'Administradores'} Registrados ({usuariosActuales.length})
           </h3>
           
           {loading ? (
             <p className="text-gray-500">Cargando...</p>
-          ) : profesores.length === 0 ? (
-            <p className="text-gray-500">No hay profesores registrados aún.</p>
+          ) : usuariosActuales.length === 0 ? (
+            <p className="text-gray-500">No hay {vistaActiva === 'profesores' ? 'profesores' : 'administradores'} registrados aún.</p>
           ) : (
             <div className="space-y-2">
-              {profesores.map(profesor => {
-                const estaActivo = profesor.activo !== false;
+              {usuariosActuales.map(usuario => {
+                const estaActivo = usuario.activo !== false;
                 
                 return (
                   <div 
-                    key={profesor.id} 
+                    key={usuario.id} 
                     className={`flex items-center justify-between rounded-lg p-4 border-2 ${
                       estaActivo 
-                        ? 'bg-green-50 border-green-200' 
+                        ? vistaActiva === 'profesores' ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'
                         : 'bg-gray-50 border-gray-300'
                     }`}
                   >
                     <div className="flex-1">
                       <p className={`font-semibold ${estaActivo ? 'text-gray-900' : 'text-gray-500'}`}>
-                        {profesor.name}
+                        {usuario.name}
                       </p>
                       <p className={`text-sm ${estaActivo ? 'text-gray-600' : 'text-gray-400'}`}>
-                        {profesor.email}
+                        {usuario.email}
                       </p>
-                      {profesor.fechaCreacion && (
+                      {usuario.fechaCreacion && (
                         <p className="text-xs text-gray-500">
-                          Registrado: {profesor.fechaCreacion.toDate?.().toLocaleDateString() || 'N/A'}
+                          Registrado: {usuario.fechaCreacion.toDate?.().toLocaleDateString() || 'N/A'}
                         </p>
                       )}
                     </div>
@@ -434,14 +491,14 @@ export default function GestionUsuarios() {
                     <div className="flex items-center gap-3">
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                         estaActivo 
-                          ? 'bg-green-100 text-green-700' 
+                          ? vistaActiva === 'profesores' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'
                           : 'bg-gray-200 text-gray-600'
                       }`}>
                         {estaActivo ? '✓ Activo' : '✗ Inactivo'}
                       </span>
                       
                       <button
-                        onClick={() => toggleEstadoProfesor(profesor.id, estaActivo, profesor.name)}
+                        onClick={() => toggleEstadoUsuario(usuario.id, estaActivo, usuario.name)}
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                           estaActivo
                             ? 'bg-red-100 text-red-600 hover:bg-red-200'

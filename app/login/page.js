@@ -111,6 +111,13 @@ export default function LoginPage() {
           <Button type="submit" variant="primary" disabled={loading}>
             {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
           </Button>
+          <button
+            type="button"
+            onClick={() => router.push('/forgot-password')}
+            className="w-full text-center text-sm text-blue-600 hover:text-blue-800 font-semibold mt-2"
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
         </form>
       </Card>
     </div>
