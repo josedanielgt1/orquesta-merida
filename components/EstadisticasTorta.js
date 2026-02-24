@@ -97,9 +97,9 @@ export default function EstadisticasTorta({ solicitudes }) {
             {/* Total en el centro */}
             <text
               x="50"
-              y="48"
+              y="46"
               textAnchor="middle"
-              fontSize="12"
+              fontSize="10"
               fill="#6b7280"
               fontWeight="600"
             >
@@ -107,9 +107,9 @@ export default function EstadisticasTorta({ solicitudes }) {
             </text>
             <text
               x="50"
-              y="58"
+              y="60"
               textAnchor="middle"
-              fontSize="16"
+              fontSize="14"
               fill="#111827"
               fontWeight="bold"
             >
