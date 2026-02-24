@@ -7,6 +7,7 @@ import { db } from '@/app/firebase';
 import { obtenerInicioSemana, obtenerNumeroSemana, formatearSemana } from '@/utils/fechas';
 import NavBar from '@/components/NavBar';
 import Loading from '@/components/ui/Loading';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 
 export default function EspacioDetallePage() {
   const [user, setUser] = useState(null);
@@ -19,7 +20,8 @@ export default function EspacioDetallePage() {
 
   const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const horas = Array.from({ length: 10 }, (_, i) => `${8 + i}:00`);
-
+  
+  useSessionTimeout(30);
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (!userData) {

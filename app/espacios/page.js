@@ -7,6 +7,7 @@ import { db } from '@/app/firebase';
 import { obtenerInicioSemana, obtenerNumeroSemana } from '@/utils/fechas';
 import NavBar from '@/components/NavBar';
 import Loading from '@/components/ui/Loading';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 
 export default function EspaciosPage() {
   const [mounted, setMounted] = useState(false);
@@ -15,7 +16,7 @@ export default function EspaciosPage() {
   const [loading, setLoading] = useState(true);
   const [semanaActual] = useState(obtenerInicioSemana(new Date()));
   const router = useRouter();
-
+  useSessionTimeout(60);
   // Generar lista de espacios ORDENADOS
   const espacios = [];
   for (let i = 1; i <= 46; i++) {

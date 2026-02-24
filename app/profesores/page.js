@@ -7,11 +7,13 @@ import { db } from '@/app/firebase';
 import NavBar from '@/components/NavBar';
 import Loading from '@/components/ui/Loading';
 import GestionUsuarios from '@/components/GestionUsuarios';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 
 
 export default function ProfesoresPage() {
   const [user, setUser] = useState(null);
   const router = useRouter();
+  useSessionTimeout(60);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');

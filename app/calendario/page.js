@@ -9,6 +9,7 @@ import NavBar from '@/components/NavBar';
 import Loading from '@/components/ui/Loading';
 import CalendarioSemanal from '@/components/CalendarioSemanal';
 import SelectorSemana from '@/components/SelectorSemana';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 
 export default function CalendarioPage() {
   const [mounted, setMounted] = useState(false);
@@ -17,6 +18,7 @@ export default function CalendarioPage() {
   const [loading, setLoading] = useState(true);
   const [semanaActual, setSemanaActual] = useState(obtenerInicioSemana(new Date()));
   const router = useRouter();
+  useSessionTimeout(30);
 
   useEffect(() => {
     setMounted(true);
