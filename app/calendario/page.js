@@ -84,8 +84,13 @@ export default function CalendarioPage() {
           <Loading message="Cargando horarios..." />
         ) : (
           <CalendarioSemanal
-            solicitudes={solicitudesSemana}
+            solicitudes={
+            user.role === 'profesor'
+              ? solicitudesSemana.filter(s => s.profesorId === user.uid)
+              : solicitudesSemana
+            }
             profesorView={user.role === 'profesor'}
+
           />
         )}
       </main>
