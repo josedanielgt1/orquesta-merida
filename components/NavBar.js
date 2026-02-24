@@ -23,11 +23,13 @@ export default function NavBar({ user }) {
   const navItems = user?.role === 'master' 
     ? [
         { label: '📊 Dashboard', href: '/dashboard/master' },
+        { label: '📅 Calendario', href: '/calendario' },
         { label: '🏫 Espacios', href: '/espacios' },
         { label: '👥 Profesores', href: '/profesores' },
       ]
     : [
         { label: '📊 Mi Dashboard', href: '/dashboard/profesor' },
+        { label: '📅 Mi Calendario', href: '/calendario' }
       ];
 
   // Texto del rol

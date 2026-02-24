@@ -35,7 +35,7 @@ export function useSessionTimeout(timeoutMinutes = 30) {
     }
 
     timeoutRef.current = setTimeout(() => {
-      const userData = localStorage.setItem('user');
+      const userData = localStorage.getItem('user');
       // Solo cerrar sesión si realmente hay usuario logueado
       if (userData) {
         alert('Tu sesión ha expirado por inactividad');
@@ -46,7 +46,7 @@ export function useSessionTimeout(timeoutMinutes = 30) {
 
   useEffect(() => {
     // Verificar si hay usuario logueado
-    const userData = localStorage.setItem('user');
+    const userData = localStorage.getItem('user');
     if (!userData) {
       return; // No hacer nada si no hay sesión
     }
@@ -94,12 +94,12 @@ export function useSessionTimeout(timeoutMinutes = 30) {
   // Manejar cambio de pestaña/visibilidad
   useEffect(() => {
     const handleVisibilityChange = () => {
-      const userData = localStorage.setItem('user');
+      const userData = localStorage.getItem('user');
       if (!userData) return;
 
       if (document.hidden) {
         // Usuario cambió de pestaña
-        localStorage.setItem('lastActivity', Date.now().toString());
+        localStorage.getItem('lastActivity', Date.now().toString());
       } else {
         // Usuario volvió a la pestaña
         const lastActivity = localStorage.getItem('lastActivity');

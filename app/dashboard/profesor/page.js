@@ -10,9 +10,9 @@ import { generarPDFPorProfesor } from '@/utils/pdfGenerator';
 import Button from '@/components/ui/Button';
 import Loading from '@/components/ui/Loading';
 import Modal from '@/components/ui/Modal';
-import CalendarioSemanal from '@/components/CalendarioSemanal';
 import SolicitudForm from '@/components/SolicitudForm';
 import NavBar from '@/components/NavBar';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 
 export default function ProfesorDashboard() {
   const [mounted, setMounted] = useState(false);
@@ -30,6 +30,7 @@ export default function ProfesorDashboard() {
     onConfirm: null
   });
   const router = useRouter();
+  useSessionTimeout(30);
 
   // Marcar componente como montado
   useEffect(() => {
@@ -396,13 +397,7 @@ export default function ProfesorDashboard() {
           )}
         </div>
 
-        {/* Calendario */}
-        <div className="mb-8">
-          <CalendarioSemanal
-            solicitudes={solicitudesSemana}
-            profesorView={true}
-          />
-        </div>
+        
 
       </main>
 

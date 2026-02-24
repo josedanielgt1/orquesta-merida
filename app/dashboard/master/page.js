@@ -12,11 +12,13 @@ import Button from '@/components/ui/Button';
 import Loading from '@/components/ui/Loading';
 import Modal from '@/components/ui/Modal';
 import OcupacionEspacios from '@/components/OcupacionEspacios';
-import CalendarioSemanal from '@/components/CalendarioSemanal';
 import BuscadorEspacios from '@/components/BuscadorEspacios';
 import SelectorSemana from '@/components/SelectorSemana';
 import GestionSemanas from '@/components/GestionSemanas';
 import NavBar from '@/components/NavBar';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
+import EstadisticasTorta from '@/components/EstadisticasTorta';
+
 
 export default function MasterDashboard() {
   const [mounted, setMounted] = useState(false);
@@ -33,6 +35,7 @@ export default function MasterDashboard() {
     type: 'info'
   });
   const router = useRouter();
+  useSessionTimeout(30);
 
   // Marcar componente como montado
   useEffect(() => {
@@ -268,34 +271,11 @@ export default function MasterDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-gray-500 text-sm font-semibold mb-2">
-              Solicitudes Pendientes
-            </h3>
-            <p className="text-4xl font-bold text-blue-600">{pendientes}</p>
-            <p className="text-xs text-gray-500 mt-1">Todas las semanas</p>
-          </div>
+       {/* Gráfico de Estadísticas */}
+       <div className="mb-8">
+        <EstadisticasTorta solicitudes={solicitudes} />
+       </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-gray-500 text-sm font-semibold mb-2">
-              Espacios Ocupados
-            </h3>
-            <p className="text-4xl font-bold text-green-600">
-              {espaciosOcupados}/{espacios.length}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">Semana seleccionada</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-gray-500 text-sm font-semibold mb-2">
-              Total Aprobadas
-            </h3>
-            <p className="text-4xl font-bold text-purple-600">{aprobadas}</p>
-            <p className="text-xs text-gray-500 mt-1">Semana seleccionada</p>
-          </div>
-        </div>
 
         {/* Exportar PDF */}
         <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg shadow p-6 mb-8">
@@ -420,13 +400,7 @@ export default function MasterDashboard() {
           )}
         </div>
 
-        {/* Calendario General */}
-        <div className="mb-8">
-          <CalendarioSemanal
-            solicitudes={solicitudesSemana}
-            profesorView={false}
-          />
-        </div>
+        
 
         {/* Ocupación de Espacios */}
         <div className="mb-8">
