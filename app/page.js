@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const router = useRouter();
@@ -9,58 +9,70 @@ export default function Home() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
 
+  // Marcar componente como montado
   useEffect(() => {
     setMounted(true);
-    
-    // Si ya está logueado, redirigir
-    const userData = localStorage.getItem('user');
+  }, []);
+
+  // Redirección y PWA
+  useEffect(() => {
+    if (!mounted) return;
+
+    // Redirección si ya está logueado
+    const userData = localStorage.getItem("user");
+
     if (userData) {
-      const user = JSON.parse(userData);
-      if (user.role === 'master') {
-        router.push('/dashboard/master');
-      } else {
-        router.push('/dashboard/profesor');
+      try {
+        const user = JSON.parse(userData);
+
+        if (user.role === "master") {
+          router.push("/dashboard/master");
+          return;
+        } else {
+          router.push("/dashboard/profesor");
+          return;
+        }
+      } catch (error) {
+        console.error("Error al leer user del localStorage", error);
       }
     }
-    // Detectar si PWA es instalable
+
+    // Manejo del evento PWA
     const handleBeforeInstallPrompt = (e) => {
-        // Prevenir que Chrome muestre el prompt automáticamente
-        e.preventDefault();
-         // Guardar el evento para usarlo después
-        setDeferredPrompt(e);
-         // Mostrar botón de instalación
-        setShowInstallButton(true);
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallButton(true);
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    // Detectar si ya está instalada
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-     setShowInstallButton(false);
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    // Si ya está instalada, ocultar botón
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      setShowInstallButton(false);
     }
+
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     };
-  },  [router]);
+  }, [router, mounted]);
+
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
-      alert('La aplicación ya está instalada o no está disponible para instalar en este momento.');
+      alert("La aplicación ya está instalada o no está disponible para instalar.");
       return;
     }
-    // Mostrar prompt de instalación
-    deferredPrompt.prompt();
 
-    // Esperar la respuesta del usuario
+    deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
-      console.log('Usuario aceptó la instalación');
-      } else {
-      console.log('Usuario rechazó la instalación');
-      }
-      // Limpiar el prompt
-      setDeferredPrompt(null);
-     setShowInstallButton(false);
-    
+
+    if (outcome === "accepted") {
+      console.log("Usuario aceptó la instalación");
+    } else {
+      console.log("Usuario rechazó la instalación");
+    }
+
+    setDeferredPrompt(null);
+    setShowInstallButton(false);
   };
 
   return (
@@ -71,13 +83,15 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <span className="text-3xl">🎼</span>
             <div>
-              <h1 className="font-bold text-gray-900 text-lg leading-tight">Orquesta Sinfónica</h1>
+              <h1 className="font-bold text-gray-900 text-lg leading-tight">
+                Orquesta Sinfónica
+              </h1>
               <p className="text-xs text-gray-600 leading-tight">de Mérida</p>
             </div>
           </div>
-          
+
           <button
-            onClick={() => router.push('/login')}
+            onClick={() => router.push("/login")}
             className="px-6 py-2 bg-white text-blue-600 rounded-full font-semibold shadow-md hover:shadow-lg transition-all"
           >
             Iniciar Sesión
@@ -91,7 +105,7 @@ export default function Home() {
           <div className="inline-block mb-6">
             <div className="text-8xl mb-4 animate-bounce">🎼</div>
           </div>
-          
+
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
             Sistema de Gestión
             <br />
@@ -99,18 +113,19 @@ export default function Home() {
               de Espacios
             </span>
           </h1>
-          
+
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
             Administra los espacios de la Orquesta Sinfónica de Mérida de forma eficiente y profesional
           </p>
-          
+
           <div className="flex gap-4 justify-center">
             <button
-              onClick={() => router.push('/login')}
+              onClick={() => router.push("/login")}
               className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all"
             >
               Comenzar →
             </button>
+
             {showInstallButton && (
               <button
                 onClick={handleInstallClick}
@@ -125,83 +140,63 @@ export default function Home() {
 
         {/* Features Grid */}
         <div className="grid md:grid-cols-3 gap-8 mt-20">
-          {/* Feature 1 */}
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">
             <div className="text-5xl mb-4">📅</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">
-              Solicitudes Inteligentes
-            </h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Solicitudes Inteligentes</h3>
             <p className="text-gray-600">
               Crea solicitudes por rango de fechas y múltiples días. El sistema valida conflictos automáticamente.
             </p>
           </div>
 
-          {/* Feature 2 */}
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">
             <div className="text-5xl mb-4">📧</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">
-              Notificaciones por Email
-            </h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Notificaciones por Email</h3>
             <p className="text-gray-600">
               Recibe emails cuando tus solicitudes sean aprobadas o rechazadas. Mantente siempre informado.
             </p>
           </div>
 
-          {/* Feature 3 */}
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">
             <div className="text-5xl mb-4">📊</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">
-              Visualización Clara
-            </h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Visualización Clara</h3>
             <p className="text-gray-600">
               Calendarios semanales, ocupación de espacios en tiempo real y exportación a PDF.
             </p>
           </div>
 
-          {/* Feature 4 */}
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">
             <div className="text-5xl mb-4">🏫</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">
-              45+ Espacios
-            </h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">45+ Espacios</h3>
             <p className="text-gray-600">
               Gestiona todos los espacios de la orquesta desde un solo lugar. Búsqueda y filtrado avanzado.
             </p>
           </div>
 
-          {/* Feature 5 */}
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">
             <div className="text-5xl mb-4">👥</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">
-              Gestión de Usuarios
-            </h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Gestión de Usuarios</h3>
             <p className="text-gray-600">
               Invita profesores por email con registro seguro. Activa o inactiva usuarios fácilmente.
             </p>
           </div>
 
-          {/* Feature 6 */}
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">
             <div className="text-5xl mb-4">📱</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">
-              PWA Instalable
-            </h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">PWA Instalable</h3>
             <p className="text-gray-600">
               Instala la app en tu celular o computadora. Funciona como una aplicación nativa.
             </p>
           </div>
         </div>
 
-        {/* CTA Section */}
+        {/* CTA */}
         <div className="mt-20 text-center bg-gradient-to-r from-blue-600 to-purple-600 rounded-3xl p-12 text-white shadow-2xl">
-          <h2 className="text-3xl font-bold mb-4">
-            ¿Listo para optimizar tu gestión de espacios?
-          </h2>
+          <h2 className="text-3xl font-bold mb-4">¿Listo para optimizar tu gestión de espacios?</h2>
           <p className="text-xl mb-8 text-blue-100">
             Únete a la Orquesta Sinfónica de Mérida en la era digital
           </p>
           <button
-            onClick={() => router.push('/login')}
+            onClick={() => router.push("/login")}
             className="px-10 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all"
           >
             Iniciar Sesión →
@@ -214,25 +209,24 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row justify-between items-center text-center md:text-left gap-4">
             <div className="text-gray-600">
-          <p className="text-sm font-semibold">
-            © 2026 Orquesta Sinfónica de Mérida - Sistema de Gestión de Espacios
-          </p>
-          <p className="text-xs text-gray-400 mt-2">
-            Desarrollado con ❤️ para la música
-          </p>
-          <p className="text-xs text-gray-400 mt-2">
-            Creado por Josedaniel Guerrero
-            <br />
-            <a
-            href="josedanielgt1@gmail.com"
-             className="text-blue-600 hover:text-blue-800"
-             >
-              josedanielgt1@gmail.com
-             </a>
-          </p>
+              <p className="text-sm font-semibold">
+                © 2026 Orquesta Sinfónica de Mérida - Sistema de Gestión de Espacios
+              </p>
+              <p className="text-xs text-gray-400 mt-2">Desarrollado con ❤️ para la música</p>
+              <p className="text-xs text-gray-400 mt-2">
+                Creado por Josedaniel Guerrero
+                <br />
+                <a
+                
+                  href="mailto:josedanielgt1@gmail.com"
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  josedanielgt1@gmail.com
+                </a>
+              </p>
+            </div>
+          </div>
         </div>
-       </div>
-      </div>  
       </footer>
     </div>
   );

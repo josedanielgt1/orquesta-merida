@@ -7,6 +7,7 @@ import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebas
 import { auth, db } from '@/app/firebase';
 import { obtenerInicioSemana, obtenerNumeroSemana, formatearSemana } from '@/utils/fechas';
 import { generarPDFHorarios } from '@/utils/pdfGenerator';
+import { emailSolicitudAprobada, emailSolicitudRechazada } from '@/utils/emailTemplates';
 import Button from '@/components/ui/Button';
 import Loading from '@/components/ui/Loading';
 import Modal from '@/components/ui/Modal';
@@ -16,11 +17,9 @@ import BuscadorEspacios from '@/components/BuscadorEspacios';
 import SelectorSemana from '@/components/SelectorSemana';
 import GestionSemanas from '@/components/GestionSemanas';
 import NavBar from '@/components/NavBar';
-import { emailSolicitudAprobada, emailSolicitudRechazada } from '@/utils/emailTemplates';
-import { useSessionTimeout } from '@/hooks/useSessionTimeout';
-import { useLogoutOnClose } from '@/hooks/useLogoutOnClose';
 
 export default function MasterDashboard() {
+  const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState(null);
   const [solicitudes, setSolicitudes] = useState([]);
   const [espacios, setEspacios] = useState([]);
@@ -33,11 +32,16 @@ export default function MasterDashboard() {
     message: '',
     type: 'info'
   });
-  useSessionTimeout(30); 
-  useLogoutOnClose();
   const router = useRouter();
 
+  // Marcar componente como montado
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     const userData = localStorage.getItem('user');
     if (!userData) {
       router.push('/login');
@@ -59,7 +63,15 @@ export default function MasterDashboard() {
       espaciosList.push(`E${i}`);
     }
     espaciosList.push('E11A', 'E25A', 'E25B', 'E25C');
-    espaciosList.sort();
+   
+    espaciosList.sort((a,b) => {
+    const numA = parseInt(a.substring(1));
+    const numB = parseInt(b.substring(1));
+    if (numA !== numB) return numA - numB;
+    return a.localeCompare(b); // Para E11A vs E11
+    });
+
+
     setEspacios(espaciosList);
 
     // Escuchar TODAS las solicitudes
@@ -76,7 +88,7 @@ export default function MasterDashboard() {
     );
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, mounted]);
 
   const aprobarSolicitud = async (solicitud, espacio) => {
     if (!espacio) {
@@ -124,24 +136,25 @@ export default function MasterDashboard() {
       });
       return;
     }
-      // aprobar en Firestore
+
     try {
       await updateDoc(doc(db, 'requests', solicitud.id), {
         estado: 'aprobada',
         espacioAsignado: espacio,
         fechaAprobacion: serverTimestamp()
       });
-      // Enviar Email al Profesor
+
+      // Enviar email al profesor
       const solicitudActualizada = {
-       ...solicitud,
-       espacioAsignado: espacio
+        ...solicitud,
+        espacioAsignado: espacio
       };
 
       const htmlEmail = emailSolicitudAprobada(
-         { name: solicitud.profesorName },
-         solicitudActualizada
+        { name: solicitud.profesorName },
+        solicitudActualizada
       );
-      //enviar email(no bloqueante)
+
       fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,16 +162,13 @@ export default function MasterDashboard() {
           to: solicitud.profesorEmail || solicitud.email,
           subject: `✅ Solicitud Aprobada - ${solicitud.dia} ${solicitud.horaInicio}-${solicitud.horaFin}`,
           html: htmlEmail
-       })  
-     }).catch(err => console.error('Error enviando email:', err)); 
+        })
+      }).catch(err => console.error('Error enviando email:', err));
       
-      
-      
-       setModal({
-        
+      setModal({
         isOpen: true,
         title: '✅ Solicitud aprobada',
-        message: `La solicitud de ${solicitud.profesorName} para el ${solicitud.dia} ha sido aprobada en el espacio ${espacio}.`,
+        message: `La solicitud de ${solicitud.profesorName} para el ${solicitud.dia} ha sido aprobada en el espacio ${espacio}.\n\nSe ha enviado un email de notificación al profesor.`,
         type: 'success'
       });
     } catch (err) {
@@ -175,12 +185,14 @@ export default function MasterDashboard() {
   const rechazarSolicitud = async (solicitudId, solicitud) => {
     setRechazarData({ solicitudId, solicitud });
   };
+
   const confirmarRechazo = async (motivo) => {
     if (!rechazarData) return;
     
     const { solicitudId, solicitud } = rechazarData;
+    
     setRechazarData(null);
-
+    
     try {
       await updateDoc(doc(db, 'requests', solicitudId), {
         estado: 'rechazada',
@@ -188,14 +200,13 @@ export default function MasterDashboard() {
         fechaAprobacion: serverTimestamp()
       });
 
-      //enviar Email al profesor
       const htmlEmail = emailSolicitudRechazada(
         { name: solicitud.profesorName },
-         solicitud,
-         motivo || 'Sin motivo especificado'
+        solicitud,
+        motivo || 'Sin motivo especificado'
       );
-       // Enviar email (no bloqueante)
-       fetch('/api/send-email', {
+
+      fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -204,15 +215,16 @@ export default function MasterDashboard() {
           html: htmlEmail
         })
       }).catch(err => console.error('Error enviando email:', err));
-
+      
       setModal({
         isOpen: true,
         title: 'Solicitud rechazada',
-        message: 'La solicitud ha sido rechazada correctamente.',
+        message: 'La solicitud ha sido rechazada correctamente.\n\nSe ha enviado un email de notificación al profesor.',
         type: 'info',
         showCancel: false,
-        onConfirm:null
+        onConfirm: null
       });
+
     } catch (err) {
       console.error('Error:', err);
       setModal({
@@ -236,7 +248,7 @@ export default function MasterDashboard() {
     );
   };
 
-  if (!user) return <Loading message="Cargando panel..." />;
+  if (!mounted || !user) return <Loading message="Cargando panel..." />;
 
   // Filtros
   const semanaId = obtenerNumeroSemana(semanaActual);
@@ -322,7 +334,7 @@ export default function MasterDashboard() {
           />
         </div>
 
-        {/* Solicitudes Pendientes - TODAS LAS SEMANAS */}
+        {/* Solicitudes Pendientes */}
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <h2 className="text-2xl font-bold mb-2 text-gray-900">
             Solicitudes Pendientes ({pendientes})
@@ -356,7 +368,7 @@ export default function MasterDashboard() {
           )}
         </div>
 
-        {/* Solicitudes Aprobadas - SEMANA SELECCIONADA */}
+        {/* Solicitudes Aprobadas */}
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <h2 className="text-2xl font-bold mb-2 text-gray-900">
             Solicitudes Aprobadas ({aprobadas})
@@ -425,6 +437,7 @@ export default function MasterDashboard() {
         </div>
 
       </main>
+
       {/* Modal de rechazo con input */}
       {rechazarData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
@@ -432,45 +445,47 @@ export default function MasterDashboard() {
             <h3 className="text-xl font-bold text-gray-900 mb-4">
               ⚠️ Rechazar solicitud
             </h3>
-
+            
             <p className="text-gray-700 mb-4">
               ¿Motivo del rechazo? (opcional)
             </p>
+            
             <textarea
-             id="motivoRechazo"
-             rows="3"
-             placeholder="Ej: Espacio no disponible, conflicto de horario..."
-             className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
+              id="motivoRechazo"
+              rows="3"
+              placeholder="Ej: Espacio no disponible, conflicto de horario..."
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
             />
+            
             <div className="flex gap-3">
               <button
-               onClick={() => setRechazarData(null)}
-               className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200"
-               >
+                onClick={() => setRechazarData(null)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200"
+              >
                 Cancelar
               </button>
-               <button
-               onClick={() => {
-                const motivo = document.getElementById('motivoRechazo').value;
+              <button
+                onClick={() => {
+                  const motivo = document.getElementById('motivoRechazo').value;
                   confirmarRechazo(motivo);
-               }}
-               className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700"
+                }}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700"
               >
                 Rechazar
               </button>
-             </div>
             </div>
-           </div>
-          )}
+          </div>
+        </div>
+      )}
 
-
-
-         {/* Modal */}
+      {/* Modal principal */}
       <Modal
         isOpen={modal.isOpen}
         onClose={() => setModal({...modal, isOpen: false})}
         title={modal.title}
         type={modal.type}
+        showCancel={modal.showCancel}
+        onConfirm={modal.onConfirm}
       >
         <p className="whitespace-pre-line">{modal.message}</p>
       </Modal>

@@ -8,17 +8,19 @@ export default function OcupacionEspacios({ solicitudes, espacios }) {
   const espaciosPorPagina = 12;
   
   const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  
   const generarHorarios = () => {
     const horarios = [];
-    for (let h = 8; h <= 19; h++) {
-      for (let m of [0, 15, 30, 45]){
-        if (h=== 19 && m >0) break; // terminar en 19:00
+    for (let h = 8; h <= 18; h++) {
+      for (let m of [0, 15, 30, 45]) {
+        if (h === 18 && m > 0) break;
         horarios.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
       }
     }
     return horarios;
   };
-  const horas = generarHorarios  ();
+  
+  const horas = generarHorarios();
 
   // Paginación
   const totalPaginas = Math.ceil(espacios.length / espaciosPorPagina);
@@ -34,32 +36,70 @@ export default function OcupacionEspacios({ solicitudes, espacios }) {
       if (s.dia !== dia) return false;
       
       const [horaNum, minNum] = hora.split(':').map(Number);
-     const [inicioHora, inicioMin] = s.horaInicio.split(':').map(Number);
+      const [inicioHora, inicioMin] = s.horaInicio.split(':').map(Number);
       const [finHora, finMin] = s.horaFin.split(':').map(Number);
       
       const horaActualMinutos = horaNum * 60 + minNum;
       const inicioMinutos = inicioHora * 60 + inicioMin;
       const finMinutos = finHora * 60 + finMin;
+      
       return horaActualMinutos >= inicioMinutos && horaActualMinutos < finMinutos;
     });
   };
 
   const calcularPorcentajeOcupacion = (espacio) => {
-    const aprobadas = solicitudes.filter(s => 
+    // Filtrar solicitudes aprobadas de ESTE DÍA para este espacio
+    const aprobadasEspacio = solicitudes.filter(s => 
       s.estado === 'aprobada' && 
-      s.espacioAsignado === espacio
+      s.espacioAsignado === espacio &&
+      s.dia === diaSeleccionado  // ← CLAVE: Solo este día
     );
     
-    let horasOcupadas = 0;
-    const horasDisponibles = horas.length * dias.length; // 11 horas × 6 días = 66 horas
+    if (aprobadasEspacio.length === 0) return 0;
     
-    aprobadas.forEach(s => {
-      const inicio = parseInt(s.horaInicio.split(':')[0]);
-      const fin = parseInt(s.horaFin.split(':')[0]);
-      horasOcupadas += (fin - inicio);
+    // Convertir hora a minutos totales
+    const convertirAMinutos = (hora) => {
+      const [h, m] = hora.split(':').map(Number);
+      return h * 60 + (m || 0);
+    };
+    
+    // Crear lista de intervalos
+    const intervalos = aprobadasEspacio.map(s => ({
+      inicio: convertirAMinutos(s.horaInicio),
+      fin: convertirAMinutos(s.horaFin)
+    }));
+    
+    // Ordenar intervalos por hora de inicio
+    intervalos.sort((a, b) => a.inicio - b.inicio);
+    
+    // Fusionar intervalos solapados
+    const fusionados = [];
+    let actual = intervalos[0];
+    
+    for (let i = 1; i < intervalos.length; i++) {
+      const siguiente = intervalos[i];
+      
+      if (siguiente.inicio <= actual.fin) {
+        // Solapamiento - fusionar
+        actual.fin = Math.max(actual.fin, siguiente.fin);
+      } else {
+        // No hay solapamiento - guardar actual y avanzar
+        fusionados.push(actual);
+        actual = siguiente;
+      }
+    }
+    fusionados.push(actual);
+    
+    // Sumar minutos de intervalos fusionados
+    let minutosOcupados = 0;
+    fusionados.forEach(intervalo => {
+      minutosOcupados += (intervalo.fin - intervalo.inicio);
     });
     
-    return Math.round((horasOcupadas / horasDisponibles) * 100);
+    // Total disponible para UN DÍA: 11 horas = 660 minutos
+    const minutosDisponibles = 11 * 60; // 660 minutos
+    
+    return Math.round((minutosOcupados / minutosDisponibles) * 100);
   };
 
   const paginaSiguiente = () => {

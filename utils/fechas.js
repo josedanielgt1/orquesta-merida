@@ -1,13 +1,33 @@
 // Obtener el lunes de la semana de una fecha
 export function obtenerInicioSemana(fecha) {
-  const date = new Date(fecha);
+  // Asegurarse de trabajar con un objeto Date válido
+  let date;
+  
+  if (fecha instanceof Date) {
+    date = new Date(fecha.getTime()); // Copiar fecha
+  } else if (typeof fecha === 'string') {
+    // Si es string YYYY-MM-DD, parsearlo correctamente
+    const [year, month, day] = fecha.split('-').map(Number);
+    if (year && month && day) {
+      date = new Date(year, month - 1, day); // Mes es 0-indexed
+    } else {
+      date = new Date(fecha);
+    }
+  } else {
+    date = new Date(fecha);
+  }
+  
+  // Obtener el día de la semana (0 = Domingo, 1 = Lunes, ..., 6 = Sábado)
   const day = date.getDay();
+  
+  // Calcular diferencia para llegar al lunes
   const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  
   date.setDate(diff);
   date.setHours(0, 0, 0, 0);
+  
   return date;
 }
-
 // Obtener el sábado de la semana
 export function obtenerFinSemana(fecha) {
   const inicio = obtenerInicioSemana(fecha);

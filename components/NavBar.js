@@ -9,16 +9,29 @@ export default function NavBar({ user }) {
   const pathname = usePathname();
 
   const handleLogout = async () => {
-    await signOut(auth);
-    localStorage.removeItem('user');
-    router.push('/login');
+    try {
+      localStorage.removeItem('user');
+      await signOut(auth);
+      router.push('/login');
+    } catch (err) {
+      console.error('Error al cerrar sesión:', err);
+      router.push('/login');
+    }
   };
 
-  const navItems = [
-    { label: '📊 Dashboard', href: '/dashboard/master' },
-    { label: '🏫 Espacios', href: '/espacios' },
-    { label: '👥 Profesores', href: '/profesores' },
-  ];
+  // Navegación según el rol
+  const navItems = user?.role === 'master' 
+    ? [
+        { label: '📊 Dashboard', href: '/dashboard/master' },
+        { label: '🏫 Espacios', href: '/espacios' },
+        { label: '👥 Profesores', href: '/profesores' },
+      ]
+    : [
+        { label: '📊 Mi Dashboard', href: '/dashboard/profesor' },
+      ];
+
+  // Texto del rol
+  const rolTexto = user?.role === 'master' ? 'Administrador' : 'Profesor';
 
   return (
     <header className="bg-white shadow sticky top-0 z-50">
@@ -55,7 +68,7 @@ export default function NavBar({ user }) {
           <div className="flex items-center gap-4">
             <div className="text-right hidden md:block">
               <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
-              <p className="text-xs text-gray-500">Administrador</p>
+              <p className="text-xs text-gray-500">{rolTexto}</p>
             </div>
             <button
               onClick={handleLogout}

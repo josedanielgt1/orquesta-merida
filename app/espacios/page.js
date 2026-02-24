@@ -9,22 +9,36 @@ import NavBar from '@/components/NavBar';
 import Loading from '@/components/ui/Loading';
 
 export default function EspaciosPage() {
+  const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState(null);
   const [solicitudes, setSolicitudes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [semanaActual] = useState(obtenerInicioSemana(new Date()));
   const router = useRouter();
 
-  // Generar lista de espacios
+  // Generar lista de espacios ORDENADOS
   const espacios = [];
   for (let i = 1; i <= 46; i++) {
-    if (i === 35 || i === 37 || i === 38 || i === 39 || i === 40) continue;
+    if ([35, 37, 38, 39, 40].includes(i)) continue;
     espacios.push(`E${i}`);
   }
   espacios.push('E11A', 'E25A', 'E25B', 'E25C');
-  espacios.sort();
+  
+  // Ordenamiento natural
+  espacios.sort((a, b) => {
+    const numA = parseInt(a.substring(1));
+    const numB = parseInt(b.substring(1));
+    if (numA !== numB) return numA - numB;
+    return a.localeCompare(b);
+  });
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     const userData = localStorage.getItem('user');
     if (!userData) {
       router.push('/login');
@@ -46,13 +60,20 @@ export default function EspaciosPage() {
         snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
         setSolicitudes(data);
         setLoading(false);
+      },
+      (error) => {
+        console.error('Error al escuchar solicitudes:', error);
+        if (error.code === 'permission-denied') {
+          localStorage.removeItem('user');
+          router.push('/login');
+        }
       }
     );
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, mounted]);
 
-  if (!user) return <Loading message="Cargando espacios..." />;
+  if (!mounted || !user) return <Loading message="Cargando espacios..." />;
 
   // Calcular ocupación de cada espacio esta semana
   const semanaId = obtenerNumeroSemana(semanaActual);

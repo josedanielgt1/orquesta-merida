@@ -3,24 +3,23 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { auth, db } from '@/app/firebase';
-import { obtenerInicioSemana, formatearSemana, obtenerNumeroSemana } from '@/utils/fechas';
+import { obtenerInicioSemana, obtenerNumeroSemana, formatearSemana } from '@/utils/fechas';
 import { generarPDFPorProfesor } from '@/utils/pdfGenerator';
 import Button from '@/components/ui/Button';
 import Loading from '@/components/ui/Loading';
 import Modal from '@/components/ui/Modal';
-import SolicitudForm from '@/components/SolicitudForm';
 import CalendarioSemanal from '@/components/CalendarioSemanal';
-import { useSessionTimeout } from '@/hooks/useSessionTimeout';
-import { useLogoutOnClose } from '@/hooks/useLogoutOnClose';
+import SolicitudForm from '@/components/SolicitudForm';
+import NavBar from '@/components/NavBar';
 
 export default function ProfesorDashboard() {
+  const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState(null);
   const [solicitudes, setSolicitudes] = useState([]);
-  const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [vistaActiva, setVistaActiva] = useState('solicitudes');
+  const [showForm, setShowForm] = useState(false);
   const [semanaActual, setSemanaActual] = useState(obtenerInicioSemana(new Date()));
   const [modal, setModal] = useState({
     isOpen: false,
@@ -30,11 +29,16 @@ export default function ProfesorDashboard() {
     showCancel: false,
     onConfirm: null
   });
-  useSessionTimeout(30);
-  useLogoutOnClose();
   const router = useRouter();
 
+  // Marcar componente como montado
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     const userData = localStorage.getItem('user');
     if (!userData) {
       router.push('/login');
@@ -59,42 +63,39 @@ export default function ProfesorDashboard() {
       snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() });
       });
-      data.sort((a, b) => {
-        if (!a.semanaId || !b.semanaId) return 0;
-        return a.semanaId.localeCompare(b.semanaId);
-      });
       setSolicitudes(data);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, mounted]);
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    localStorage.removeItem('user');
-    router.push('/login');
+  const irSemanaAnterior = () => {
+    const nuevaFecha = new Date(semanaActual);
+    nuevaFecha.setDate(nuevaFecha.getDate() - 7);
+    setSemanaActual(obtenerInicioSemana(nuevaFecha));
   };
 
-  const exportarMiHorario = () => {
-    generarPDFPorProfesor(
-      solicitudes,
-      user.name,
-      formatearSemana(obtenerInicioSemana(new Date()))
-    );
+  const irSemanaSiguiente = () => {
+    const nuevaFecha = new Date(semanaActual);
+    nuevaFecha.setDate(nuevaFecha.getDate() + 7);
+    setSemanaActual(obtenerInicioSemana(nuevaFecha));
   };
 
-  const cancelarSolicitud = async (solicitudId, solicitudInfo) => {
+  const irSemanaActual = () => {
+    setSemanaActual(obtenerInicioSemana(new Date()));
+  };
+
+  const cancelarSolicitud = async (solicitud) => {
     setModal({
       isOpen: true,
-      title: '⚠️ ¿Cancelar solicitud?',
-      message: `¿Estás seguro de cancelar la solicitud de:\n\n${solicitudInfo.dia} · ${solicitudInfo.horaInicio} - ${solicitudInfo.horaFin}\n\nEsta acción no se puede deshacer.`,
+      title: '¿Cancelar solicitud?',
+      message: `¿Estás seguro de cancelar esta solicitud?\n\n${solicitud.dia} ${solicitud.horaInicio}-${solicitud.horaFin}`,
       type: 'warning',
       showCancel: true,
       onConfirm: async () => {
         try {
-          await deleteDoc(doc(db, 'requests', solicitudId));
-          
+          await deleteDoc(doc(db, 'requests', solicitud.id));
           setModal({
             isOpen: true,
             title: '✅ Solicitud cancelada',
@@ -108,7 +109,7 @@ export default function ProfesorDashboard() {
           setModal({
             isOpen: true,
             title: 'Error',
-            message: 'No se pudo cancelar la solicitud. Intenta de nuevo.',
+            message: 'No se pudo cancelar la solicitud.',
             type: 'error',
             showCancel: false,
             onConfirm: null
@@ -118,157 +119,52 @@ export default function ProfesorDashboard() {
     });
   };
 
-  if (!user) return <Loading message="Cargando panel..." />;
-
-  // Stats
-  const pendientes = solicitudes.filter(s => s.estado === 'pendiente').length;
-  const aprobadas = solicitudes.filter(s => s.estado === 'aprobada').length;
-  const rechazadas = solicitudes.filter(s => s.estado === 'rechazada').length;
-  const horasSemanales = solicitudes
-    .filter(s => s.estado === 'aprobada')
-    .reduce((total, s) => {
-      const inicio = parseInt(s.horaInicio?.split(':')[0] || 0);
-      const fin = parseInt(s.horaFin?.split(':')[0] || 0);
-      return total + (fin - inicio);
-    }, 0);
-
-  // Agrupar solicitudes por grupoId
-  const solicitudesAgrupadas = [];
-  const gruposVistos = new Set();
-
-  solicitudes.forEach(sol => {
-    if (sol.esSolicitudGrupo && sol.grupoId) {
-      if (!gruposVistos.has(sol.grupoId)) {
-        gruposVistos.add(sol.grupoId);
-        const delGrupo = solicitudes.filter(s => s.grupoId === sol.grupoId);
-        solicitudesAgrupadas.push({
-          esGrupo: true,
-          grupoId: sol.grupoId,
-          solicitudes: delGrupo,
-          dia: sol.dia,
-          grupoDias: sol.grupoDias,
-          horaInicio: sol.horaInicio,
-          horaFin: sol.horaFin,
-          tipoClase: sol.tipoClase,
-          observaciones: sol.observaciones,
-          grupoFechaInicio: sol.grupoFechaInicio,
-          grupoFechaFin: sol.grupoFechaFin,
-        });
-      }
-    } else {
-      solicitudesAgrupadas.push({
-        esGrupo: false,
-        solicitudes: [sol],
-        ...sol
+  const exportarMiHorario = () => {
+    const aprobadas = solicitudes.filter(s => s.estado === 'aprobada');
+    if (aprobadas.length === 0) {
+      setModal({
+        isOpen: true,
+        title: 'Sin clases aprobadas',
+        message: 'No tienes clases aprobadas para exportar.',
+        type: 'info'
       });
+      return;
     }
-  });
+    generarPDFPorProfesor(aprobadas, user.name);
+  };
+
+  if (!mounted || !user) return <Loading message="Cargando panel..." />;
+
+  const semanaId = obtenerNumeroSemana(semanaActual);
+  const solicitudesSemana = solicitudes.filter(s => s.semanaId === semanaId);
+  const pendientes = solicitudesSemana.filter(s => s.estado === 'pendiente').length;
+  const aprobadas = solicitudesSemana.filter(s => s.estado === 'aprobada').length;
+  const rechazadas = solicitudesSemana.filter(s => s.estado === 'rechazada').length;
+
+  // Agrupar por rango
+  const solicitudesAgrupadas = solicitudes.reduce((acc, sol) => {
+    if (sol.esSolicitudGrupo && sol.grupoId) {
+      if (!acc[sol.grupoId]) {
+        acc[sol.grupoId] = [];
+      }
+      acc[sol.grupoId].push(sol);
+    } else {
+      acc[sol.id] = [sol];
+    }
+    return acc;
+  }, {});
 
   return (
     <div className="min-h-screen bg-gray-100">
-
-      {/* Header */}
-      <header className="bg-white shadow sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🎼</span>
-              <div>
-                <p className="font-bold text-gray-900 leading-tight">Orquesta Sinfónica</p>
-                <p className="text-xs text-gray-500 leading-tight">de Mérida</p>
-              </div>
-            </div>
-
-            <nav className="hidden md:flex items-center gap-2">
-              <button
-                onClick={() => { setVistaActiva('solicitudes'); setShowForm(false); }}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  vistaActiva === 'solicitudes'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                📋 Mis Solicitudes
-              </button>
-              <button
-                onClick={() => { setVistaActiva('calendario'); setShowForm(false); }}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  vistaActiva === 'calendario'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                📅 Mi Calendario
-              </button>
-            </nav>
-
-            <div className="flex items-center gap-3">
-              <div className="hidden md:block text-right">
-                <p className="text-sm font-semibold text-gray-900">{user.name}</p>
-                <p className="text-xs text-gray-500">Profesor</p>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-red-100 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-200"
-              >
-                Cerrar Sesión
-              </button>
-            </div>
-          </div>
-
-          <div className="md:hidden flex gap-2 pb-3">
-            <button
-              onClick={() => setVistaActiva('solicitudes')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                vistaActiva === 'solicitudes' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              📋 Solicitudes
-            </button>
-            <button
-              onClick={() => setVistaActiva('calendario')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                vistaActiva === 'calendario' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              📅 Calendario
-            </button>
-          </div>
-        </div>
-      </header>
+      <NavBar user={user} />
 
       <main className="max-w-7xl mx-auto px-4 py-8">
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-gray-500 text-xs font-semibold mb-1">Pendientes</h3>
-            <p className="text-3xl font-bold text-yellow-500">{pendientes}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-gray-500 text-xs font-semibold mb-1">Aprobadas</h3>
-            <p className="text-3xl font-bold text-green-600">{aprobadas}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-gray-500 text-xs font-semibold mb-1">Rechazadas</h3>
-            <p className="text-3xl font-bold text-red-500">{rechazadas}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-gray-500 text-xs font-semibold mb-1">Horas aprobadas</h3>
-            <p className="text-3xl font-bold text-blue-600">{horasSemanales}h</p>
-          </div>
-        </div>
-
-        {/* Botones */}
-        <div className="flex gap-4 mb-8 flex-wrap">
-          <Button variant="primary" onClick={() => { setShowForm(!showForm); setVistaActiva('solicitudes'); }}>
+        {/* Botón Nueva Solicitud */}
+        <div className="mb-8">
+          <Button variant="primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? '✕ Cancelar' : '+ Nueva Solicitud'}
           </Button>
-          {aprobadas > 0 && (
-            <Button variant="secondary" onClick={exportarMiHorario}>
-              📄 Descargar Mi Horario PDF
-            </Button>
-          )}
         </div>
 
         {/* Formulario */}
@@ -283,279 +179,230 @@ export default function ProfesorDashboard() {
           </div>
         )}
 
-        {/* VISTA: SOLICITUDES */}
-        {vistaActiva === 'solicitudes' && !showForm && (
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              Mis Solicitudes ({solicitudes.length})
-            </h2>
-
-            {loading ? (
-              <p className="text-gray-500">Cargando...</p>
-            ) : solicitudesAgrupadas.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-5xl mb-4">📭</p>
-                <p className="text-gray-500 text-lg mb-4">No tienes solicitudes aún</p>
-                <Button variant="primary" onClick={() => setShowForm(true)}>
-                  + Crear mi primera solicitud
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {solicitudesAgrupadas.map((item, idx) => {
-                  if (item.esGrupo) {
-                    // ── SOLICITUD POR RANGO ──
-                    const total = item.solicitudes.length;
-                    const aprobadas = item.solicitudes.filter(s => s.estado === 'aprobada').length;
-                    const pendientes = item.solicitudes.filter(s => s.estado === 'pendiente').length;
-                    const rechazadas = item.solicitudes.filter(s => s.estado === 'rechazada').length;
-
-                    const fechaInicioText = item.grupoFechaInicio?.toDate
-                      ? item.grupoFechaInicio.toDate().toLocaleDateString('es-ES')
-                      : item.grupoFechaInicio
-                        ? new Date(item.grupoFechaInicio).toLocaleDateString('es-ES')
-                        : '';
-
-                    const fechaFinText = item.grupoFechaFin?.toDate
-                      ? item.grupoFechaFin.toDate().toLocaleDateString('es-ES')
-                      : item.grupoFechaFin
-                        ? new Date(item.grupoFechaFin).toLocaleDateString('es-ES')
-                        : '';
-
-                    return (
-                      <div key={item.grupoId} className="border-2 border-purple-200 rounded-xl p-5 bg-purple-50">
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <span className="inline-block text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full font-bold mb-2">
-                              📅 Solicitud por rango · {total} semanas
-                            </span>
-                            <h3 className="text-lg font-bold text-gray-900">
-                              {item.grupoDias?.join(' + ')} · {item.horaInicio} - {item.horaFin}
-                            </h3>
-                            <p className="text-sm text-gray-600 capitalize">
-                              Clase {item.tipoClase}
-                            </p>
-                            {fechaInicioText && (
-                              <p className="text-sm text-purple-700 font-semibold mt-1">
-                                📆 {fechaInicioText} → {fechaFinText}
-                              </p>
-                            )}
-                            {item.observaciones && (
-                              <p className="text-xs text-gray-500 mt-1">📝 {item.observaciones}</p>
-                            )}
-                          </div>
-
-                          <div className="text-right text-sm space-y-1">
-                            {aprobadas > 0 && (
-                              <p className="text-green-600 font-semibold">✓ {aprobadas} aprobadas</p>
-                            )}
-                            {pendientes > 0 && (
-                              <p className="text-yellow-600 font-semibold">⏳ {pendientes} pendientes</p>
-                            )}
-                            {rechazadas > 0 && (
-                              <p className="text-red-600 font-semibold">✗ {rechazadas} rechazadas</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          {item.solicitudes.map(sol => {
-                            let semanaTexto = '';
-                            if (sol.semanaInicio) {
-                              try {
-                                const fecha = sol.semanaInicio.toDate
-                                  ? sol.semanaInicio.toDate()
-                                  : new Date(sol.semanaInicio);
-                                semanaTexto = fecha.toLocaleDateString('es-ES', {
-                                  day: '2-digit', month: '2-digit', year: 'numeric'
-                                });
-                              } catch {}
-                            }
-
-                            return (
-                              <div
-                                key={sol.id}
-                                className={`flex items-center justify-between px-4 py-2 rounded-lg border ${
-                                  sol.estado === 'aprobada'
-                                    ? 'bg-green-50 border-green-200'
-                                    : sol.estado === 'rechazada'
-                                    ? 'bg-red-50 border-red-200'
-                                    : 'bg-white border-gray-200'
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  <span className="text-lg">
-                                    {sol.estado === 'aprobada' ? '✅' :
-                                     sol.estado === 'rechazada' ? '❌' : '⏳'}
-                                  </span>
-                                  <div>
-                                    <p className="text-sm font-semibold text-gray-900">
-                                      {sol.dia} · Semana del {semanaTexto}
-                                    </p>
-                                    {sol.estado === 'aprobada' && (
-                                      <p className="text-xs text-green-700 font-semibold">
-                                        Espacio {sol.espacioAsignado}
-                                      </p>
-                                    )}
-                                    {sol.estado === 'rechazada' && sol.notasAdmin && (
-                                      <p className="text-xs text-red-600">
-                                        {sol.notasAdmin}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                                    sol.estado === 'aprobada'
-                                      ? 'bg-green-100 text-green-700'
-                                      : sol.estado === 'rechazada'
-                                      ? 'bg-red-100 text-red-700'
-                                      : 'bg-yellow-100 text-yellow-700'
-                                  }`}>
-                                    {sol.estado === 'aprobada' ? 'Aprobada' :
-                                     sol.estado === 'rechazada' ? 'Rechazada' : 'Pendiente'}
-                                  </span>
-
-                                  {/* Botón cancelar */}
-                                  {sol.estado === 'pendiente' && (
-                                    <button
-                                      onClick={() => cancelarSolicitud(sol.id, sol)}
-                                      className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
-                                      title="Cancelar esta solicitud"
-                                    >
-                                      🗑️
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  } else {
-                    // ── SOLICITUD INDIVIDUAL ──
-                    const sol = item.solicitudes[0];
-                    let semanaTexto = '';
-                    if (sol.semanaInicio) {
-                      try {
-                        const fecha = sol.semanaInicio.toDate
-                          ? sol.semanaInicio.toDate()
-                          : new Date(sol.semanaInicio);
-                        semanaTexto = fecha.toLocaleDateString('es-ES', {
-                          day: '2-digit', month: '2-digit', year: 'numeric'
-                        });
-                      } catch {}
-                    }
-
-                    return (
-                      <div
-                        key={sol.id}
-                        className={`border-l-4 pl-4 py-4 rounded-r-lg ${
-                          sol.estado === 'pendiente'
-                            ? 'border-yellow-500 bg-yellow-50'
-                            : sol.estado === 'aprobada'
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-red-500 bg-red-50'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            {semanaTexto && (
-                              <p className="text-xs text-gray-500 mb-1">
-                                📅 Semana del {semanaTexto}
-                              </p>
-                            )}
-                            <p className="font-bold text-lg text-gray-900">
-                              {sol.dia} · {sol.horaInicio} - {sol.horaFin}
-                            </p>
-                            <p className="text-sm text-gray-600 capitalize">
-                              Clase {sol.tipoClase}
-                            </p>
-                            {sol.observaciones && (
-                              <p className="text-sm text-gray-500 mt-1">📝 {sol.observaciones}</p>
-                            )}
-                            <p className={`text-sm font-bold mt-2 ${
-                              sol.estado === 'pendiente' ? 'text-yellow-600' :
-                              sol.estado === 'aprobada' ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {sol.estado === 'pendiente' && '⏳ Pendiente de aprobación'}
-                              {sol.estado === 'aprobada' && `✓ Aprobada - Espacio ${sol.espacioAsignado}`}
-                              {sol.estado === 'rechazada' && `✗ Rechazada${sol.notasAdmin ? ` - ${sol.notasAdmin}` : ''}`}
-                            </p>
-                          </div>
-
-                          {/* Botón cancelar */}
-                          {sol.estado === 'pendiente' && (
-                            <button
-                              onClick={() => cancelarSolicitud(sol.id, sol)}
-                              className="ml-4 p-2 text-red-600 hover:bg-red-100 rounded-lg transition-all"
-                              title="Cancelar solicitud"
-                            >
-                              🗑️
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-                })}
-              </div>
-            )}
+            <h3 className="text-gray-500 text-sm font-semibold mb-2">
+              Pendientes
+            </h3>
+            <p className="text-4xl font-bold text-yellow-600">{pendientes}</p>
+            <p className="text-xs text-gray-500 mt-1">Semana seleccionada</p>
           </div>
-        )}
 
-        {/* VISTA: CALENDARIO */}
-        {vistaActiva === 'calendario' && (
-          <div>
-            {/* Navegación de semana */}
-            <div className="bg-white rounded-lg shadow p-4 mb-6">
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => {
-                    const nueva = new Date(semanaActual);
-                    nueva.setDate(nueva.getDate() - 7);
-                    setSemanaActual(nueva);
-                  }}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300"
-                >
-                  ← Anterior
-                </button>
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-gray-500 text-sm font-semibold mb-2">
+              Aprobadas
+            </h3>
+            <p className="text-4xl font-bold text-green-600">{aprobadas}</p>
+            <p className="text-xs text-gray-500 mt-1">Semana seleccionada</p>
+          </div>
 
-                <div className="text-center">
-                  <p className="text-xl font-bold text-gray-900">
-                    {formatearSemana(semanaActual)}
-                  </p>
-                  <button
-                    onClick={() => setSemanaActual(obtenerInicioSemana(new Date()))}
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    Ir a esta semana
-                  </button>
-                </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-gray-500 text-sm font-semibold mb-2">
+              Rechazadas
+            </h3>
+            <p className="text-4xl font-bold text-red-600">{rechazadas}</p>
+            <p className="text-xs text-gray-500 mt-1">Semana seleccionada</p>
+          </div>
+        </div>
 
-                <button
-                  onClick={() => {
-                    const nueva = new Date(semanaActual);
-                    nueva.setDate(nueva.getDate() + 7);
-                    setSemanaActual(nueva);
-                  }}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300"
-                >
-                  Siguiente →
-                </button>
-              </div>
+        {/* Exportar PDF */}
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow p-6 mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">
+                📄 Mi Horario Completo
+              </h2>
+              <p className="text-gray-600 text-sm">
+                Descarga todas tus clases aprobadas ordenadas por semana
+              </p>
+            </div>
+            <Button variant="primary" onClick={exportarMiHorario}>
+              ⬇️ Descargar PDF
+            </Button>
+          </div>
+        </div>
+
+        {/* Navegación de semanas */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={irSemanaAnterior}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-all"
+            >
+              ← Anterior
+            </button>
+
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-1">Semana actual</p>
+              <p className="text-xl font-bold text-gray-900">
+                {formatearSemana(semanaActual)}
+              </p>
             </div>
 
-            <CalendarioSemanal
-              solicitudes={solicitudes.filter(s =>
-                s.semanaId === obtenerNumeroSemana(semanaActual)
-              )}
-              profesorView={true}
-            />
+            <button
+              onClick={irSemanaSiguiente}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-all"
+            >
+              Siguiente →
+            </button>
           </div>
-        )}
+
+          <div className="text-center mt-4">
+            <button
+              onClick={irSemanaActual}
+              className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg font-semibold hover:bg-blue-200 transition-all text-sm"
+            >
+              📅 Ir a esta semana
+            </button>
+          </div>
+        </div>
+
+        {/* Mis Solicitudes Agrupadas */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 className="text-2xl font-bold mb-6 text-gray-900">
+            Mis Solicitudes
+          </h2>
+
+          {loading ? (
+            <p className="text-gray-500">Cargando solicitudes...</p>
+          ) : Object.keys(solicitudesAgrupadas).length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-4xl mb-3">📭</p>
+              <p className="text-gray-500">No has creado solicitudes aún</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(solicitudesAgrupadas).map(([grupoId, solicitudesGrupo]) => {
+                const esGrupo = solicitudesGrupo[0].esSolicitudGrupo;
+                const todasPendientes = solicitudesGrupo.every(s => s.estado === 'pendiente');
+
+                return (
+                  <div key={grupoId} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    
+                    {/* Header del grupo */}
+                    {esGrupo && (
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="inline-block text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-semibold">
+                            📅 Solicitud por rango de fechas
+                          </span>
+                          
+                          {todasPendientes && (
+                            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded font-semibold">
+                              ⏳ Todas pendientes
+                            </span>
+                          )}
+                        </div>
+                        
+                        <p className="text-sm text-gray-600">
+                          Del{' '}
+                          {solicitudesGrupo[0].grupoFechaInicio?.toDate?.().toLocaleDateString('es-ES') || 'N/A'}
+                          {' → '}
+                          {solicitudesGrupo[0].grupoFechaFin?.toDate?.().toLocaleDateString('es-ES') || 'N/A'}
+                        </p>
+                        
+                        {solicitudesGrupo[0].grupoDias && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Días: {solicitudesGrupo[0].grupoDias.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Solicitudes individuales */}
+                    <div className="space-y-2">
+                      {solicitudesGrupo.map(solicitud => (
+                        <div
+                          key={solicitud.id}
+                          className={`p-4 rounded-lg border-l-4 ${
+                            solicitud.estado === 'pendiente'
+                              ? 'bg-yellow-50 border-yellow-400'
+                              : solicitud.estado === 'aprobada'
+                              ? 'bg-green-50 border-green-400'
+                              : 'bg-red-50 border-red-400'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              {esGrupo && (
+                                <p className="text-xs text-gray-500 mb-1">
+                                  📅 Semana: {solicitud.semanaInicio?.toDate?.().toLocaleDateString('es-ES') || 'N/A'}
+                                </p>
+                              )}
+                              
+                              <p className="font-semibold text-gray-900">
+                                {solicitud.dia} · {solicitud.horaInicio} - {solicitud.horaFin}
+                              </p>
+                              
+                              <p className="text-sm text-gray-600 capitalize">
+                                {solicitud.tipoClase}
+                                {solicitud.espacioAsignado && (
+                                  <span className="font-semibold text-green-700">
+                                    {' · Espacio: '}{solicitud.espacioAsignado}
+                                  </span>
+                                )}
+                              </p>
+
+                              {solicitud.observaciones && (
+                                <p className="text-xs text-gray-500 mt-1 italic">
+                                  💬 {solicitud.observaciones}
+                                </p>
+                              )}
+
+                              {solicitud.notasAdmin && (
+                                <div className="mt-2 p-2 bg-white rounded border border-red-200">
+                                  <p className="text-xs font-semibold text-red-600">
+                                    Motivo de rechazo:
+                                  </p>
+                                  <p className="text-sm text-red-700">{solicitud.notasAdmin}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 ml-4">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                  solicitud.estado === 'pendiente'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : solicitud.estado === 'aprobada'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-red-100 text-red-700'
+                                }`}
+                              >
+                                {solicitud.estado === 'pendiente' && '⏳ Pendiente'}
+                                {solicitud.estado === 'aprobada' && '✅ Aprobada'}
+                                {solicitud.estado === 'rechazada' && '❌ Rechazada'}
+                              </span>
+
+                              {solicitud.estado === 'pendiente' && (
+                                <button
+                                  onClick={() => cancelarSolicitud(solicitud)}
+                                  className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-all"
+                                  title="Cancelar solicitud"
+                                >
+                                  🗑️
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Calendario */}
+        <div className="mb-8">
+          <CalendarioSemanal
+            solicitudes={solicitudesSemana}
+            profesorView={true}
+          />
+        </div>
 
       </main>
 

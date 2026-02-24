@@ -9,11 +9,17 @@ export function useSessionTimeout(timeoutMinutes = 30) {
   const router = useRouter();
   const timeoutRef = useRef(null);
   const lastActivityRef = useRef(Date.now());
+  const isLoggingOutRef = useRef(false);
 
   const logout = async () => {
+    // Evitar múltiples logouts simultáneos
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+
     try {
       await signOut(auth);
       localStorage.removeItem('user');
+      localStorage.removeItem('lastActivity');
       router.push('/login');
     } catch (err) {
       console.error('Error al cerrar sesión:', err);
@@ -22,26 +28,49 @@ export function useSessionTimeout(timeoutMinutes = 30) {
 
   const resetTimeout = () => {
     lastActivityRef.current = Date.now();
+    localStorage.setItem('lastActivity', Date.now().toString());
     
-    // Limpiar timeout anterior
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
-    // Crear nuevo timeout
     timeoutRef.current = setTimeout(() => {
-      alert('Tu sesión ha expirado por inactividad');
-      logout();
-    }, timeoutMinutes * 60 * 1000); // Convertir minutos a milisegundos
+      const userData = localStorage.setItem('user');
+      // Solo cerrar sesión si realmente hay usuario logueado
+      if (userData) {
+        alert('Tu sesión ha expirado por inactividad');
+        logout();
+      }
+    }, timeoutMinutes * 60 * 1000);
   };
 
   useEffect(() => {
+    // Verificar si hay usuario logueado
+    const userData = localStorage.setItem('user');
+    if (!userData) {
+      return; // No hacer nada si no hay sesión
+    }
+
     // Eventos que resetean el timeout
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
 
     const handleActivity = () => {
       resetTimeout();
     };
+
+    // Al montar, verificar última actividad
+    const lastActivity = localStorage.getItem('lastActivity');
+    if (lastActivity) {
+      const elapsed = Date.now() - parseInt(lastActivity);
+      const minutesElapsed = elapsed / (1000 * 60);
+      
+      if (minutesElapsed > timeoutMinutes) {
+        // Sesión expirada
+        alert('Tu sesión ha expirado');
+        logout();
+        return;
+      }
+    }
 
     // Iniciar timeout
     resetTimeout();
@@ -62,16 +91,14 @@ export function useSessionTimeout(timeoutMinutes = 30) {
     };
   }, [timeoutMinutes]);
 
-  // Cerrar sesión al cerrar ventana/pestaña
+  // Manejar cambio de pestaña/visibilidad
   useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      // Guardar timestamp de última actividad
-      localStorage.setItem('lastActivity', Date.now().toString());
-    };
-
     const handleVisibilityChange = () => {
+      const userData = localStorage.setItem('user');
+      if (!userData) return;
+
       if (document.hidden) {
-        // Usuario cambió de pestaña o minimizó
+        // Usuario cambió de pestaña
         localStorage.setItem('lastActivity', Date.now().toString());
       } else {
         // Usuario volvió a la pestaña
@@ -80,20 +107,19 @@ export function useSessionTimeout(timeoutMinutes = 30) {
           const elapsed = Date.now() - parseInt(lastActivity);
           const minutesElapsed = elapsed / (1000 * 60);
           
-          // Si pasaron más de X minutos, cerrar sesión
           if (minutesElapsed > timeoutMinutes) {
             alert('Tu sesión ha expirado');
             logout();
+          } else {
+            resetTimeout();
           }
         }
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [timeoutMinutes]);
