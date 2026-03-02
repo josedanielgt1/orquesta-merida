@@ -88,6 +88,111 @@ export default function ProfesorDashboard() {
   };
 
   const cancelarSolicitud = async (solicitud) => {
+    const esAprobada = solicitud.estado === 'aprobada';
+    
+   if (esAprobada) {
+    const motivoCancelacion = window.prompt(
+      `Esta solicitud ya fue aprobada:\n\n` +
+      `${solicitud.dia} ${solicitud.horaInicio}-${solicitud.horaFin}\n` +
+      `Espacio: ${solicitud.espacioAsignado}\n\n` +
+      `Por favor indica el motivo de la cancelación:`
+    );
+    if (motivoCancelacion === null) return;
+
+
+
+    setModal({
+      isOpen: true,
+      title: '⚠️ ¿Confirmar cancelación?',
+
+       message: `¿Estás seguro de cancelar esta clase?\n\nMotivo: ${motivoCancelacion || 'No especificado'}`,
+      showCancel: true,
+     
+
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'requests', solicitud.id));
+          // enviar email al master
+          
+            const emailCancelacion = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+             <meta charset="utf-8">
+             </head>
+             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+              <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                  <h1 style="color: white; margin: 0;">🗑️ Clase Cancelada por Profesor</h1>
+                </div>
+
+                 <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
+                  <p style="font-size: 16px; margin-bottom: 20px;">
+                    El profesor <strong>${solicitud.profesorName}</strong> ha cancelado una clase aprobada:
+                  </p>
+
+                   <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #ef4444;">
+                    <p style="margin: 5px 0;"><strong>Día:</strong> ${solicitud.dia}</p>
+                    <p style="margin: 5px 0;"><strong>Horario:</strong> ${solicitud.horaInicio} - ${solicitud.horaFin}</p>
+                    <p style="margin: 5px 0;"><strong>Espacio:</strong> ${solicitud.espacioAsignado}</p>
+                    <p style="margin: 5px 0;"><strong>Tipo:</strong> ${solicitud.tipoClase}</p>
+                  </div>
+
+                  <div style="background: #fef2f2; padding: 15px; border-radius: 8px; margin-top: 20px; border-left: 4px solid #ef4444;">
+                    <p style="margin: 0; font-weight: 600; color: #991b1b;">Motivo de cancelación:</p>
+                    <p style="margin: 10px 0 0 0; color: #333;">${motivoCancelacion || 'No especificado'}</p>
+                  </div>
+
+
+                  <p style="margin-top: 20px; color: #666; font-size: 14px;">
+                    El espacio ${solicitud.espacioAsignado} queda disponible para ese horario.
+                  </p>
+                </div>
+
+                <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
+                  <p>El Sistema Núcleo Mérida</p>
+                </div>
+              </div>
+            </body>
+            </html>
+          `;
+           fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: 'josedanielgt1@gmail.com', // Cambiar por email real del master
+              subject: `🗑️ Clase Cancelada - ${solicitud.profesorName}`,
+              html: emailCancelacion
+            })
+          }).catch(err => console.error('Error enviando email:', err));
+               
+
+
+
+          setModal({
+            isOpen: true,
+             title: '✅ Clase cancelada',
+             message: 'La clase ha sido cancelada correctamente.\n\nSe ha notificado al administrador del motivo.',
+            
+             type: 'success',
+             showCancel: false,
+             onConfirm: null
+          });
+        } catch (err) {
+          console.error('Error:', err);
+          setModal({
+            isOpen: true,
+            title: 'Error',
+            message: 'No se pudo cancelar la solicitud.',
+            type: 'error',
+            showCancel: false,
+            onConfirm: null
+          });
+        }
+      }
+    });
+  } else{
+     // Si es pendiente, cancelar sin motivo
     setModal({
       isOpen: true,
       title: '¿Cancelar solicitud?',
@@ -105,7 +210,7 @@ export default function ProfesorDashboard() {
             showCancel: false,
             onConfirm: null
           });
-        } catch (err) {
+           } catch (err) {
           console.error('Error:', err);
           setModal({
             isOpen: true,
@@ -114,11 +219,14 @@ export default function ProfesorDashboard() {
             type: 'error',
             showCancel: false,
             onConfirm: null
-          });
-        }
-      }
+            });
+         }
+       }
     });
-  };
+  }
+}; 
+
+  
 
   const exportarMiHorario = () => {
     const aprobadas = solicitudes.filter(s => s.estado === 'aprobada');
@@ -376,7 +484,7 @@ export default function ProfesorDashboard() {
                                 {solicitud.estado === 'rechazada' && '❌ Rechazada'}
                               </span>
 
-                              {solicitud.estado === 'pendiente' && (
+                              {(solicitud.estado === 'pendiente' || solicitud.estado === 'aprobada')&& (
                                 <button
                                   onClick={() => cancelarSolicitud(solicitud)}
                                   className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-all"

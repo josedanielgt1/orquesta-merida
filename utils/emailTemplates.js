@@ -69,7 +69,7 @@ export function emailSolicitudAprobada(profesor, solicitud) {
         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
         
         <p style="font-size: 12px; color: #999; text-align: center; margin: 0;">
-          🎼 Orquesta Sinfónica de Mérida<br>
+          🎼 El Sistema Núcleo Mérida <br>
           Sistema de Gestión de Espacios
         </p>
       </div>
@@ -145,7 +145,7 @@ export function emailSolicitudRechazada(profesor, solicitud, motivo) {
         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
         
         <p style="font-size: 12px; color: #999; text-align: center; margin: 0;">
-          🎼 Orquesta Sinfónica de Mérida<br>
+          🎼  El Sistema Núcleo Mérida<br>
           Sistema de Gestión de Espacios
         </p>
       </div>

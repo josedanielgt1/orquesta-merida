@@ -30,10 +30,10 @@ export default function EspacioDetallePage() {
     }
 
     const parsedUser = JSON.parse(userData);
-    if (parsedUser.role !== 'master') {
-      router.push('/dashboard/profesor');
-      return;
-    }
+   // if (parsedUser.role !== 'master') {
+      //router.push('/dashboard/profesor');
+      //return;
+   // }
 
     setUser(parsedUser);
 
@@ -137,7 +137,7 @@ export default function EspacioDetallePage() {
           <div className="flex items-center justify-between">
             <button
               onClick={semanaAnterior}
-              className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 font-semibold"
+              className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 font-semibold text-blue-600"
             >
               ← Semana anterior
             </button>
@@ -156,7 +156,7 @@ export default function EspacioDetallePage() {
 
             <button
               onClick={semanaSiguiente}
-              className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 font-semibold"
+              className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 font-semibold text-blue-600"
             >
               Semana siguiente →
             </button>

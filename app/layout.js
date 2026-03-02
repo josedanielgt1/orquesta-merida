@@ -4,7 +4,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
-  title: 'Orquesta Sinfónica de Mérida',
+  title: 'El Sistema Núcleo Mérida',
   description: 'Sistema de gestión de espacios y horarios',
   manifest: '/manifest.json',
   icons: {
@@ -14,7 +14,7 @@ export const metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Orquesta Mérida',
+    title: 'El Sistema Núcleo Mérida',
   },
 }
 

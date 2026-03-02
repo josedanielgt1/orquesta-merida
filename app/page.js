@@ -84,9 +84,9 @@ export default function Home() {
             <span className="text-3xl">🎼</span>
             <div>
               <h1 className="font-bold text-gray-900 text-lg leading-tight">
-                Orquesta Sinfónica
+                El Sistema
               </h1>
-              <p className="text-xs text-gray-600 leading-tight">de Mérida</p>
+              <p className="text-xs text-gray-600 leading-tight">Núcleo Merida</p>
             </div>
           </div>
 
@@ -115,7 +115,7 @@ export default function Home() {
           </h1>
 
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Administra los espacios de la Orquesta Sinfónica de Mérida de forma eficiente y profesional
+            Administra los espacios de El Sistema Núcleo Mérida  de forma eficiente y profesional
           </p>
 
           <div className="flex gap-4 justify-center">
@@ -168,7 +168,7 @@ export default function Home() {
             <div className="text-5xl mb-4">🏫</div>
             <h3 className="text-xl font-bold text-gray-900 mb-3">45+ Espacios</h3>
             <p className="text-gray-600">
-              Gestiona todos los espacios de la orquesta desde un solo lugar. Búsqueda y filtrado avanzado.
+              Gestiona todos los espacios del sistema desde un solo lugar. Búsqueda y filtrado avanzado.
             </p>
           </div>
 
@@ -193,7 +193,7 @@ export default function Home() {
         <div className="mt-20 text-center bg-gradient-to-r from-blue-600 to-purple-600 rounded-3xl p-12 text-white shadow-2xl">
           <h2 className="text-3xl font-bold mb-4">¿Listo para optimizar tu gestión de espacios?</h2>
           <p className="text-xl mb-8 text-blue-100">
-            Únete a la Orquesta Sinfónica de Mérida en la era digital
+            Únete a El Sistema Núcleo Mérida Mérida en la era digital
           </p>
           <button
             onClick={() => router.push("/login")}
@@ -210,7 +210,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center text-center md:text-left gap-4">
             <div className="text-gray-600">
               <p className="text-sm font-semibold">
-                © 2026 Orquesta Sinfónica de Mérida - Sistema de Gestión de Espacios
+                © 2026 El Sistema Núcleo Mérida - Sistema de Gestión de Espacios
               </p>
               <p className="text-xs text-gray-400 mt-2">Desarrollado con ❤️ para la música</p>
               <p className="text-xs text-gray-400 mt-2">

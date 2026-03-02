@@ -16,7 +16,7 @@ export default function EspaciosPage() {
   const [loading, setLoading] = useState(true);
   const [semanaActual] = useState(obtenerInicioSemana(new Date()));
   const router = useRouter();
-  useSessionTimeout(60);
+  useSessionTimeout(30);
   // Generar lista de espacios ORDENADOS
   const espacios = [];
   for (let i = 1; i <= 46; i++) {
@@ -47,10 +47,7 @@ export default function EspaciosPage() {
     }
 
     const parsedUser = JSON.parse(userData);
-    if (parsedUser.role !== 'master') {
-      router.push('/dashboard/profesor');
-      return;
-    }
+    
 
     setUser(parsedUser);
 

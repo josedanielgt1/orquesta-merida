@@ -29,7 +29,8 @@ export default function NavBar({ user }) {
       ]
     : [
         { label: '📊 Mi Dashboard', href: '/dashboard/profesor' },
-        { label: '📅 Mi Calendario', href: '/calendario' }
+        { label: '📅 Mi Calendario', href: '/calendario' },
+        { label: '🏫 Espacios', href: '/espacios' },
       ];
 
   // Texto del rol
@@ -44,8 +45,8 @@ export default function NavBar({ user }) {
           <div className="flex items-center gap-2">
             <span className="text-2xl">🎼</span>
             <div>
-              <p className="font-bold text-gray-900 leading-tight">Orquesta Sinfónica</p>
-              <p className="text-xs text-gray-500 leading-tight">de Mérida</p>
+              <p className="font-bold text-gray-900 leading-tight">El Sistema</p>
+              <p className="text-xs text-gray-500 leading-tight">Núcleo Mérida</p>
             </div>
           </div>
 

@@ -13,7 +13,7 @@ import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 export default function ProfesoresPage() {
   const [user, setUser] = useState(null);
   const router = useRouter();
-  useSessionTimeout(60);
+  useSessionTimeout(30);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
